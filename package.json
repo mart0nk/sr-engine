@@ -1,5 +1,5 @@
 {
-  "name": "@trader-agent/support-resistance",
+  "name": "sr-engine",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -13,10 +13,25 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
     "typescript": "*",
     "vitest": "*"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mart0nk/sr-engine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mart0nk/sr-engine/issues"
+  },
+  "homepage": "https://github.com/mart0nk/sr-engine#readme",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ]
 }

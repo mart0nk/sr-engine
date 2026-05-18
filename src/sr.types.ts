@@ -430,7 +430,7 @@ export type StopQuality = 'CLEAN' | 'ACCEPTABLE' | 'WIDE' | 'POOR' | 'NONE';
 
 export type SrBottleneck =
   | 'PIVOT_LAG'
-  | 'ZONE_THRESHOLD'
+  | 'NO_ACTIONABLE_ZONE'
   | 'NO_CLEAN_RANGE'
   | 'STOP_NONE'
   | 'PATH_BLOCKED'
@@ -447,6 +447,7 @@ export type SupportResistanceDiagnostics = {
   watchableZoneCount: number;
   contextZoneCount: number;
   droppedZoneCount: number;
+  transitionZoneCount: number;   // BROKEN lifecycle zones waiting for retest (survived kind filter)
   s1Present: boolean;
   r1Present: boolean;
   srConflict: boolean;
@@ -523,6 +524,17 @@ export type SupportResistanceSnapshot = {
   structuralS2?: SupportResistanceZone;
   structuralR1?: SupportResistanceZone;
   structuralR2?: SupportResistanceZone;
+
+  // Convenience fields promoted from s1/r1 for easy diagnostics access
+  s1Tier?: ZoneTier;
+  s1Score?: number;
+  s1OriginalRole?: StructureZoneRole;
+  s1RoleFlipped?: boolean;
+
+  r1Tier?: ZoneTier;
+  r1Score?: number;
+  r1OriginalRole?: StructureZoneRole;
+  r1RoleFlipped?: boolean;
 
   srConflict?: SupportResistanceConflict;
   conflictResolvedZones?: ConflictResolvedZone[];

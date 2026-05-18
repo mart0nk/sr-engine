@@ -341,7 +341,7 @@ export class SupportResistanceEngine {
     }
 
     // v2.2: split actionable LEVEL_ZONE vs context RANGE_BOX
-    const actionableSrZones = publicActiveZones.filter(
+    const s1r1EligibleZones = publicActiveZones.filter(
       (zone) =>
         isActionableLevelZone(zone) &&
         (zone.tier === 'ACTIONABLE' ||
@@ -355,7 +355,7 @@ export class SupportResistanceEngine {
 
     // Opposite-role conflict resolver — makes final map non-overlapping before S1/R1 selection
     const resolverResult = resolveOppositeRoleConflicts({
-      zones: actionableSrZones,
+      zones: s1r1EligibleZones,
       price,
       config,
       ...(atr !== undefined ? { atr } : {}),
@@ -366,7 +366,7 @@ export class SupportResistanceEngine {
     const supportZones = resolverResult.accepted.filter((z) => z.role === 'SUPPORT');
     const resistanceZones = resolverResult.accepted.filter((z) => z.role === 'RESISTANCE');
 
-    if (actionableSrZones.length === 0 && contextZones.length > 0) {
+    if (s1r1EligibleZones.length === 0 && contextZones.length > 0) {
       warnings.push('NO_ACTIONABLE_SR_ZONES');
       evidence.push(
         'Only range box / context zones found — no actionable level zones for SR.'
@@ -495,13 +495,14 @@ export class SupportResistanceEngine {
       candlesAnalyzed: candles.length,
       confirmedPivotCount: pivots.length,
       rawZoneCount: classified.length,
-      actionableZoneCount: actionableSrZones.filter(
+      actionableZoneCount: s1r1EligibleZones.filter(
         (zone) => zone.tier === 'ACTIONABLE' || zone.tier === undefined
       ).length,
-      watchableZoneCount: actionableSrZones.filter((zone) => zone.tier === 'WATCHABLE')
+      watchableZoneCount: s1r1EligibleZones.filter((zone) => zone.tier === 'WATCHABLE')
         .length,
       contextZoneCount: contextZones.length,
       droppedZoneCount: classified.length - classifiedWithKind.length,
+      transitionZoneCount: transitionZones.length,
       s1Present: s1 !== undefined,
       r1Present: r1 !== undefined,
       srConflict: srConflict !== undefined,
@@ -539,6 +540,10 @@ export class SupportResistanceEngine {
     if (s1 !== undefined) {
       snapshotResult.s1 = s1;
       snapshotResult.structuralS1 = s1;
+      if (s1.tier !== undefined) snapshotResult.s1Tier = s1.tier;
+      snapshotResult.s1Score = s1.score;
+      snapshotResult.s1OriginalRole = s1.originalRole;
+      snapshotResult.s1RoleFlipped = s1.role !== s1.originalRole;
     }
     if (s2 !== undefined) {
       snapshotResult.s2 = s2;
@@ -547,6 +552,10 @@ export class SupportResistanceEngine {
     if (r1 !== undefined) {
       snapshotResult.r1 = r1;
       snapshotResult.structuralR1 = r1;
+      if (r1.tier !== undefined) snapshotResult.r1Tier = r1.tier;
+      snapshotResult.r1Score = r1.score;
+      snapshotResult.r1OriginalRole = r1.originalRole;
+      snapshotResult.r1RoleFlipped = r1.role !== r1.originalRole;
     }
     if (r2 !== undefined) {
       snapshotResult.r2 = r2;
@@ -695,6 +704,7 @@ function buildSrDiagnostics(input: {
   watchableZoneCount?: number;
   contextZoneCount?: number;
   droppedZoneCount?: number;
+  transitionZoneCount?: number;
   s1Present?: boolean;
   r1Present?: boolean;
   srConflict?: boolean;
@@ -713,6 +723,7 @@ function buildSrDiagnostics(input: {
     watchableZoneCount: input.watchableZoneCount ?? 0,
     contextZoneCount: input.contextZoneCount ?? 0,
     droppedZoneCount: input.droppedZoneCount ?? 0,
+    transitionZoneCount: input.transitionZoneCount ?? 0,
     s1Present: input.s1Present ?? false,
     r1Present: input.r1Present ?? false,
     srConflict: input.srConflict ?? false,
@@ -744,7 +755,7 @@ function detectBottleneck(input: {
 }): SrBottleneck {
   if (input.confirmedPivotCount < 2) return 'PIVOT_LAG';
   if (input.rawZoneCount === 0) return 'NO_ZONES';
-  if (input.actionableZoneCount === 0) return 'ZONE_THRESHOLD';
+  if (input.actionableZoneCount === 0) return 'NO_ACTIONABLE_ZONE';
   if (input.srConflict) return 'NO_CLEAN_RANGE';
   if (input.stopQualityKnown && input.stopQuality === 'NONE') return 'STOP_NONE';
   if (input.pathQualityKnown && input.pathQuality === 'BLOCKED') return 'PATH_BLOCKED';
@@ -775,6 +786,7 @@ function buildNotReadySnapshot(input: {
     confirmedPivotCount: input.confirmedPivotCount ?? 0,
     rawZoneCount: input.rawZoneCount ?? 0,
     droppedZoneCount: input.droppedZoneCount ?? 0,
+    transitionZoneCount: 0,
     warnings: input.warnings
   });
   return {
