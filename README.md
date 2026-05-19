@@ -19,16 +19,16 @@ import {
   SupportResistanceEngine,
   type Candle,
   type SupportResistanceSnapshot,
-} from 'sr-engine';
+} from "sr-engine";
 
 const engine = new SupportResistanceEngine();
 
 const candles: Candle[] = [
   {
-    symbol: 'BTCUSDT',
-    timeframe: '15m',
-    openTime: new Date('2026-01-01T00:00:00.000Z'),
-    closeTime: new Date('2026-01-01T00:15:00.000Z'),
+    symbol: "BTCUSDT",
+    timeframe: "15m",
+    openTime: new Date("2026-01-01T00:00:00.000Z"),
+    closeTime: new Date("2026-01-01T00:15:00.000Z"),
     open: 42000,
     high: 42120,
     low: 41880,
@@ -40,17 +40,21 @@ const candles: Candle[] = [
 ];
 
 const snapshot: SupportResistanceSnapshot = engine.evaluate({
-  symbol: 'BTCUSDT',
-  timeframe: '15m',
+  symbol: "BTCUSDT",
+  timeframe: "15m",
   candles,
   currentPrice: 42100,
-  priceSource: 'MARKET_SNAPSHOT',
+  priceSource: "MARKET_SNAPSHOT",
   timestamp: new Date(),
   atr: 180,
   tickSize: 0.1,
 });
 
-console.log(snapshot.s1?.mid, snapshot.r1?.mid, snapshot.structureState.rangeLocation);
+console.log(
+  snapshot.s1?.mid,
+  snapshot.r1?.mid,
+  snapshot.structureState.rangeLocation,
+);
 ```
 
 ## Input Contract
@@ -61,7 +65,7 @@ type SupportResistanceInput = {
   timeframe: Timeframe;
   candles: Candle[];
   currentPrice: number;
-  priceSource: 'MARKET_SNAPSHOT' | 'LAST_CLOSED_CANDLE';
+  priceSource: "MARKET_SNAPSHOT" | "LAST_CLOSED_CANDLE";
   timestamp: Date;
   atr?: number;
   tickSize?: number;
@@ -74,7 +78,7 @@ The engine expects candles to be sorted oldest to newest. It can run without `at
 Supported timeframes:
 
 ```ts
-type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
+type Timeframe = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
 ```
 
 ## Output
@@ -114,13 +118,13 @@ Zones are built from confirmed swing highs/lows and then processed through:
 Zone lifecycle values:
 
 ```ts
-type ZoneLifecycle = 'FRESH' | 'TESTED' | 'BROKEN' | 'FLIPPED' | 'INVALIDATED';
+type ZoneLifecycle = "FRESH" | "TESTED" | "BROKEN" | "FLIPPED" | "INVALIDATED";
 ```
 
 Zone tiers:
 
 ```ts
-type ZoneTier = 'ACTIONABLE' | 'WATCHABLE' | 'CONTEXT' | 'DROP';
+type ZoneTier = "ACTIONABLE" | "WATCHABLE" | "CONTEXT" | "DROP";
 ```
 
 ## Configuration
@@ -131,7 +135,7 @@ Use defaults for normal operation:
 import {
   DEFAULT_SUPPORT_RESISTANCE_CONFIG,
   resolveSupportResistanceConfig,
-} from 'sr-engine';
+} from "sr-engine";
 ```
 
 Override only the fields you need:
@@ -144,11 +148,11 @@ const config = resolveSupportResistanceConfig({
 });
 
 const snapshot = engine.evaluate({
-  symbol: 'ETHUSDT',
-  timeframe: '1h',
+  symbol: "ETHUSDT",
+  timeframe: "1h",
   candles,
   currentPrice: 2500,
-  priceSource: 'LAST_CLOSED_CANDLE',
+  priceSource: "LAST_CLOSED_CANDLE",
   timestamp: new Date(),
   atr: 35,
   tickSize: 0.01,
@@ -176,6 +180,16 @@ The package also exports the lower-level building blocks used by the engine:
 
 These are useful for diagnostics, custom pipelines, or compatibility shims, but most consumers should start with `SupportResistanceEngine`.
 
+## TradingView Visual Overlay
+
+A TradingView Pine Script visual companion is available in:
+
+`examples/tradingview/gecko-sr-zones-v22-public-visual.pine`
+
+This script is intended for chart visualization and public visual review. It is not the canonical SR Engine implementation and should not be used as a parity reference for backend results.
+
+The TypeScript engine remains the source of truth.
+
 ## Design Constraints
 
 - ESM-only package.
@@ -201,4 +215,3 @@ Before publishing, the package runs:
 ```bash
 npm run prepublishOnly
 ```
-
