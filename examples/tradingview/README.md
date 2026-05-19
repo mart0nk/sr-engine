@@ -22,5 +22,5 @@ It is intended for chart visualization and public visual review only. The TypeSc
 
 ## File
 
-- `gecko-sr-zones-v22-public-visual.pine`
+- `sr-zones-v22-public-visual.pine`
 
