@@ -184,7 +184,7 @@ These are useful for diagnostics, custom pipelines, or compatibility shims, but 
 
 A TradingView Pine Script visual companion is available in:
 
-`examples/tradingview/gecko-sr-zones-v22-public-visual.pine`
+`examples/tradingview/sr-zones-v22-public-visual.pine`
 
 This script is intended for chart visualization and public visual review. It is not the canonical SR Engine implementation and should not be used as a parity reference for backend results.
 
