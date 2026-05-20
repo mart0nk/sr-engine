@@ -482,8 +482,17 @@ export class SupportResistanceEngine {
     if (rangeLocation !== undefined) structureState.rangeLocation = rangeLocation;
 
     const hasValidZone = publicActiveZones.length > 0;
+    if (!hasValidZone) {
+      missing.push('ACTIVE_SUPPORT_OR_RESISTANCE');
+      warnings.push('NO_VALID_STRUCTURE');
+      evidence.push(
+        'No FRESH/TESTED/FLIPPED zones available for public snapshot. Only BROKEN transition zones remain.'
+      );
+    }
     const hasPrice = price > 0;
     const ready = candles.length >= config.minCandlesForReady && hasPrice && hasValidZone;
+    const notReadyReason =
+      !ready && !hasValidZone ? ('NO_PUBLIC_ACTIVE_ZONES' as const) : undefined;
     const structureAvailability = resolveStructureAvailability({
       ...(s1 !== undefined ? { s1 } : {}),
       ...(r1 !== undefined ? { r1 } : {}),
@@ -522,6 +531,7 @@ export class SupportResistanceEngine {
       brokenZonesWaitingForRetest,
       structureState,
       ready,
+      ...(notReadyReason !== undefined ? { notReadyReason } : {}),
       missing: [...new Set(missing)],
       warnings: [...new Set(warnings)] as StructureWarning[],
       evidence: [...new Set(evidence)],
