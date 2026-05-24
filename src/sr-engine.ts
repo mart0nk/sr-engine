@@ -36,6 +36,7 @@ import { evaluateZoneTouchAccountingV2 } from './zone-touch-accounting.js';
 import { evaluateLiquidityRebuildEvidence } from './zone-liquidity-rebuild.js';
 import { evaluateAbsorptionRisk } from './zone-absorption.js';
 import { classifyFreshnessState } from './zone-freshness.js';
+import { classifyRangeBoundary } from './range-boundary-classifier.js';
 
 export type SupportResistanceInput = {
   symbol: string;
@@ -314,6 +315,12 @@ export class SupportResistanceEngine {
       (z) =>
         z.lifecycle === 'FRESH' || z.lifecycle === 'TESTED' || z.lifecycle === 'FLIPPED'
     );
+
+    // v2.3: classify range boundary evidence for all active zones
+    for (const zone of publicActiveZones) {
+      zone.rangeBoundaryEvidence = classifyRangeBoundary(zone);
+    }
+
     const transitionZones = classifiedWithKind.filter((z) => z.lifecycle === 'BROKEN');
     const brokenZonesWaitingForRetest = transitionZones;
 

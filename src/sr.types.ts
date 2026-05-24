@@ -14,12 +14,29 @@ export type ZoneLifecycle =
 export type ZoneOrigin =
   | 'SWING_HIGH'
   | 'SWING_LOW'
+  // Deprecated: not emitted as zone.origin. Use zone.rangeBoundaryEvidence.role instead.
   | 'RANGE_HIGH'
+  // Deprecated: not emitted as zone.origin. Use zone.rangeBoundaryEvidence.role instead.
   | 'RANGE_LOW'
   | 'BREAKOUT_LEVEL'
   | 'BREAKDOWN_LEVEL'
   | 'RETEST_LEVEL'
   | 'CLUSTER';
+
+export type RangeBoundaryRole =
+  | 'RANGE_HIGH'
+  | 'RANGE_LOW'
+  | 'NOT_RANGE_BOUNDARY';
+
+export type RangeBoundaryEvidence = {
+  role: RangeBoundaryRole;
+  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  touchCount: number;
+  cleanTouchSessions: number;
+  causedBos: boolean;
+  passThroughCount: number;
+  reasons: string[];
+};
 
 export type ZoneQuality = 'LOW' | 'MEDIUM' | 'HIGH';
 
@@ -341,6 +358,9 @@ export type SupportResistanceZone = {
   touchAccounting?: ZoneTouchAccountingV2;
   absorptionEvidence?: ZoneAbsorptionEvidence;
   liquidityRebuildEvidence?: LiquidityRebuildEvidence;
+
+  // v2.3 range boundary classification
+  rangeBoundaryEvidence?: RangeBoundaryEvidence;
 
   evidence: string[];
   warnings: SupportResistanceWarning[];
