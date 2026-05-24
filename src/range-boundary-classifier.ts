@@ -6,7 +6,7 @@ export function classifyRangeBoundary(zone: SupportResistanceZone): RangeBoundar
   const passThrough = zone.touchAccounting?.passThroughCount ?? zone.passThroughCount ?? 0;
   const causedBos = zone.originEvidence?.causedBos === true;
 
-  const hasMultiTouch = touchCount >= 3 || cleanTouches >= 2;
+  const hasMultiTouch = touchCount >= 2 || cleanTouches >= 1;
   const notBosOrigin = !causedBos;
   const notTooNoisy = passThrough <= 1;
 
@@ -48,7 +48,7 @@ export function classifyRangeBoundary(zone: SupportResistanceZone): RangeBoundar
 
   return {
     role,
-    confidence: touchCount >= 4 ? 'HIGH' : 'MEDIUM',
+    confidence: touchCount >= 3 ? 'HIGH' : 'MEDIUM',
     touchCount,
     cleanTouchSessions: cleanTouches,
     causedBos,

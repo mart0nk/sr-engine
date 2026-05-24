@@ -34,10 +34,10 @@ function makeZone(overrides: Partial<SupportResistanceZone> = {}): SupportResist
 }
 
 describe('classifyRangeBoundary', () => {
-  it('classifies SWING_HIGH with touchCount=4, causedBos=false, passThrough=0 as RANGE_HIGH HIGH confidence', () => {
+  it('classifies SWING_HIGH with touchCount=3, causedBos=false, passThrough=0 as RANGE_HIGH HIGH confidence', () => {
     const zone = makeZone({
       origin: 'SWING_HIGH',
-      touchCount: 4,
+      touchCount: 3,
       originEvidence: {
         causedBos: false,
         removedOpposingZone: false,
@@ -49,7 +49,7 @@ describe('classifyRangeBoundary', () => {
         notes: [],
       },
       touchAccounting: {
-        touchSessions: 4,
+        touchSessions: 3,
         mitigationSessions: 0,
         trueTestSessions: 0,
         cleanTouchSessions: 0,
@@ -62,12 +62,45 @@ describe('classifyRangeBoundary', () => {
 
     expect(result.role).toBe('RANGE_HIGH');
     expect(result.confidence).toBe('HIGH');
-    expect(result.touchCount).toBe(4);
+    expect(result.touchCount).toBe(3);
     expect(result.causedBos).toBe(false);
     expect(result.passThroughCount).toBe(0);
   });
 
-  it('classifies SWING_LOW with touchCount=3, causedBos=false, passThrough=1 as RANGE_LOW MEDIUM confidence', () => {
+  it('classifies SWING_HIGH with touchCount=2, causedBos=false, passThrough=0 as RANGE_HIGH MEDIUM confidence', () => {
+    const zone = makeZone({
+      origin: 'SWING_HIGH',
+      touchCount: 2,
+      originEvidence: {
+        causedBos: false,
+        removedOpposingZone: false,
+        displacementAtr: 0,
+        displacementPct: 0,
+        impulseVolumeConfirmed: false,
+        significantOrigin: false,
+        originAgeCandles: 0,
+        notes: [],
+      },
+      touchAccounting: {
+        touchSessions: 2,
+        mitigationSessions: 0,
+        trueTestSessions: 0,
+        cleanTouchSessions: 0,
+        noisyTouchSessions: 0,
+        passThroughCount: 0,
+      },
+    });
+
+    const result = classifyRangeBoundary(zone);
+
+    expect(result.role).toBe('RANGE_HIGH');
+    expect(result.confidence).toBe('MEDIUM');
+    expect(result.touchCount).toBe(2);
+    expect(result.causedBos).toBe(false);
+    expect(result.passThroughCount).toBe(0);
+  });
+
+  it('classifies SWING_LOW with touchCount=3, causedBos=false, passThrough=1 as RANGE_LOW HIGH confidence', () => {
     const zone = makeZone({
       origin: 'SWING_LOW',
       role: 'SUPPORT',
@@ -96,7 +129,7 @@ describe('classifyRangeBoundary', () => {
     const result = classifyRangeBoundary(zone);
 
     expect(result.role).toBe('RANGE_LOW');
-    expect(result.confidence).toBe('MEDIUM');
+    expect(result.confidence).toBe('HIGH');
     expect(result.touchCount).toBe(3);
     expect(result.causedBos).toBe(false);
     expect(result.passThroughCount).toBe(1);
