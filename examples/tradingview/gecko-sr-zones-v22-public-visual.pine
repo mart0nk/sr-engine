@@ -1,745 +1,655 @@
-//@version=5
-// SPDX-License-Identifier: MIT
-//
-// TradingView visual companion for sr-engine.
-// This script is a lightweight visual projection of SR Engine v2.2 semantics.
-// The TypeScript engine in src/ remains the canonical implementation.
-// No trade execution, no agent decisions, no strategy signals.
-indicator("Gecko SR Zones v2.2 — Visual Clean + No-Overlap S/R Conflict Guard", overlay=true, max_boxes_count=240, max_labels_count=240, max_lines_count=20)
+//@version=6
+indicator("Smart Money Indicator v1.5 - Tiny Legend Controls", overlay = true, max_boxes_count = 300, max_lines_count = 300, max_labels_count = 300)
 
-// -----------------------------------------------------------------------------
-// Gecko SR Zones v2.2 — Visual Clean
-// TradingView visual projection of SR Engine v2.2:
-// - confirmed pivots only
-// - wick-to-body level zones
-// - wide zones are context only, not S/R levels
-// - S1/S2/R1/R2 resolve only from actionable LEVEL_ZONE objects
-// - lightweight BROKEN -> FLIPPED retest handling for visual role reversal
-// - lightweight v2.2 semantics: mitigation, true tests, freshness, absorption
-// - context/range boxes hidden by default
-// - S1/R1 remain nearest structural truth when nearest support/resistance overlap
-// - visual layer uses public-style conflict handling: strongest-only display + warning
-// - S2/R2 stay as outer references, but are not drawn by default during S/R conflict
-// - no trade/no-trade labels, no agent decisions
-// -----------------------------------------------------------------------------
+//SMI Pine v1.5 is a standalone current-chart-timeframe overlay with valid-quality visibility, tiny/optional legend, and separate visual toggles.
+// It is context-only: no entries, no sizing, no orders, no execution.
+// TypeScript core remains the canonical backend truth layer.
+// Pine sourceTimeframe = current chart timeframe.
 
-// ===== Inputs =====
-groupCore = "1. Core logic"
-pivotLeft  = input.int(2,  "Pivot left bars",  minval=1, maxval=20, group=groupCore)
-pivotRight = input.int(2,  "Pivot right bars", minval=1, maxval=20, group=groupCore)
-atrLen     = input.int(14, "ATR length", minval=1, maxval=100, group=groupCore)
-startMode  = input.string("Pivot candle", "Zone starts at", options=["Pivot candle", "Confirmed candle"], group=groupCore)
+//──────────────────────────────────────────────────────────────────────────────
+// Inputs
+//──────────────────────────────────────────────────────────────────────────────
+displayMode = input.string("Clean", "Display mode", options = ["Clean", "Normal", "Debug", "Audit"], group = "Display")
+zoneVisibilityMode = input.string("Valid + Quality", "Zone visibility mode", options = ["Valid + Quality", "All valid", "Debug all detected"], group = "Display")
+swingLen = input.int(3, "Swing length", minval = 1, group = "Structure")
 
-minWidthTicks = input.int(2, "Minimum zone width ticks", minval=1, maxval=100, group=groupCore)
-minWidthPct   = input.float(0.03, "Minimum zone width %", minval=0.0, step=0.01, group=groupCore)
-maxWidthAtr   = input.float(0.25, "Max visual LEVEL width ATR", minval=0.05, step=0.05, group=groupCore)
-maxWidthPct   = input.float(0.80, "Max visual LEVEL width % floor", minval=0.05, step=0.05, group=groupCore)
+showStructure = input.bool(true, "Show Structure", group = "Structure")
+showSwingLabels = input.bool(true, "Show HH / HL / LH / LL", group = "Structure")
 
-// Merge is deliberately conservative. It prevents old and new zones at similar prices
-// from becoming huge blanket rectangles across the whole chart.
-groupMerge = "2. Clustering"
-allowMerge        = input.bool(true, "Merge overlapping same-kind same-role zones", group=groupMerge)
-mergeBps          = input.float(25.0, "Merge proximity bps", minval=0.0, step=1.0, group=groupMerge)
-mergeAtrMult      = input.float(0.15, "Merge proximity ATR", minval=0.0, step=0.05, group=groupMerge)
-mergeMaxWidthMult = input.float(1.35, "Max merged LEVEL width x visual cap", minval=1.0, step=0.05, group=groupMerge)
-maxMergeBars      = input.int(80, "Max bars between merged candidates", minval=1, maxval=1000, group=groupMerge)
+// Main visual toggles. These hide/show visuals only; they do not turn the script into a signal engine.
+showFvg = input.bool(true, "Show FVG zones", group = "Visibility")
+showOb = input.bool(true, "Show Order Blocks", group = "Visibility")
+showOnlyOb = input.bool(false, "Show only Order Blocks", group = "Visibility")
+showSellSideSweeps = input.bool(true, "Show SSL sweeps", group = "Visibility")
+showBuySideSweeps = input.bool(true, "Show BSL sweeps", group = "Visibility")
 
-// Lifecycle is intentionally light for the visual overlay. Backend remains canonical.
-groupLife = "3. Lifecycle"
-breakBufferPct = input.float(0.01, "Close break buffer %", minval=0.0, step=0.01, group=groupLife)
-showBroken     = input.bool(false, "Show broken LEVEL zones", group=groupLife)
+showFvgQualityLabels = input.bool(false, "Show FVG quality labels", group = "FVG")
+showObLabels = input.bool(true, "Show OB labels", group = "Order Blocks")
 
-// v2.2 semantic layer. This is a visual approximation, not a full backend port.
-groupV22 = "4. SR Engine v2.2 semantics"
-rangeBoxWidthPct = input.float(0.70, "Range/context width threshold %", minval=0.05, step=0.05, group=groupV22)
-wideZonePolicy   = input.string("Context only", "Wide zone policy", options=["Context only", "Drop"], group=groupV22)
-showContextZones = input.bool(false, "Show context/range boxes", group=groupV22)
-showV22Hints     = input.bool(true, "Show compact freshness/absorption hints", group=groupV22)
-showContextInPriceLabel = input.bool(false, "Show inside context in price label", group=groupV22)
+showLiquidity = input.bool(true, "Show Liquidity Pools", group = "Liquidity")
+showSweeps = input.bool(true, "Show Liquidity Sweeps", group = "Liquidity")
+sweepDisplay = input.string("Markers only", "Sweep display", options = ["Off", "Markers only", "Labels"], group = "Liquidity")
 
-originDisplacementAtrThreshold = input.float(1.0, "Origin displacement ATR threshold", minval=0.0, step=0.1, group=groupV22)
-staleUntouchedBars             = input.int(300, "Stale untouched bars", minval=20, maxval=3000, group=groupV22)
-trueTestMinReactionStrength    = input.string("NORMAL", "True-test min reaction", options=["WEAK", "NORMAL", "STRONG"], group=groupV22)
-weakReactionAtr                = input.float(0.05, "WEAK reaction ATR", minval=0.0, step=0.01, group=groupV22)
-normalReactionAtr              = input.float(0.20, "NORMAL reaction ATR", minval=0.0, step=0.01, group=groupV22)
-strongReactionAtr              = input.float(0.50, "STRONG reaction ATR", minval=0.0, step=0.05, group=groupV22)
-multiTestAbsorptionThreshold   = input.int(2, "Absorption threshold true tests", minval=2, maxval=10, group=groupV22)
+showMidpoints = input.bool(true, "Show Midpoints / CE", group = "Zones")
+midpointDisplay = input.string("Strong active only", "Midpoint display", options = ["Off", "Strong active only", "All active", "Debug only"], group = "Zones")
+showInvalidatedZones = input.bool(false, "Show Invalidated Zones", group = "Zones")
+showMitigatedZones = input.bool(false, "Show Mitigated Zones", group = "Zones")
+mitigatedThresholdPct = input.float(0.95, "Mitigated threshold", minval = 0.50, maxval = 1.0, step = 0.05, group = "Zones")
+maxZoneAgeBars = input.int(365, "Max visible zone age bars (0 = unlimited)", minval = 0, maxval = 3000, group = "Zones")
+keepStrongZonesBeyondMaxAge = input.bool(true, "Keep valid strong zones beyond max age", group = "Zones")
+showZoneStatusLabels = input.bool(false, "Show zone status labels", group = "Zones")
+showContextBadge = input.bool(true, "Show current context badge", group = "Display")
 
-// Display is intentionally simple: S1/S2/R1/R2.
-groupDisplay = "5. Display"
-levelsPerSide  = input.int(2, "Core levels per side", minval=1, maxval=3, group=groupDisplay)
-maxStoredZones = input.int(100, "Max stored zones", minval=20, maxval=220, group=groupDisplay)
-rightPadBars   = input.int(35, "Right label lane bars", minval=5, maxval=200, group=groupDisplay)
-showPriceLabel = input.bool(true, "Show current price label", group=groupDisplay)
-showZoneLabels = input.bool(true, "Show right-side zone labels", group=groupDisplay)
-zoneBorderBase = input.int(1, "Base border width", minval=1, maxval=4, group=groupDisplay)
+showLegend = input.bool(false, "Show legend", group = "Legend")
+legendMode = input.string("Tiny", "Legend mode", options = ["Tiny", "Compact"], group = "Legend")
+legendTextSizeInput = input.string("Small", "Legend text size", options = ["Tiny", "Small", "Normal"], group = "Legend")
+legendPositionInput = input.string("Top right", "Legend position", options = ["Top right", "Top left", "Bottom right", "Bottom left"], group = "Legend")
 
-// S1/R1 overlap guard. This is not a new S/R zone.
-// It only warns when nearest support and nearest resistance do not leave a clean range.
-groupNoCleanRange = "6. S1/R1 overlap guard"
-minCleanGapTicks = input.int(3, "Minimum clean gap ticks", minval=0, maxval=100, group=groupNoCleanRange)
-minCleanGapPct   = input.float(0.001, "Minimum clean gap price fraction", minval=0.0, step=0.0001, group=groupNoCleanRange, tooltip="0.001 = 0.10% of price")
-minCleanGapAtr   = input.float(0.15, "Minimum clean gap ATR", minval=0.0, step=0.01, group=groupNoCleanRange)
-showNoCleanRangeOuter   = input.bool(false, "Debug: draw S2/R2 outer boxes on S/R conflict", group=groupNoCleanRange)
-srConflictDisplayMode = input.string("Strongest only", "S/R conflict display", options=["Strongest only", "Show both dimmed"], group=groupNoCleanRange, tooltip="Strongest only is closest to common public S/R scripts: avoid overlapping clean boxes, show one stronger/relevant zone, and keep a no-clean-range warning. Outer S2/R2 boxes are hidden by default.")
+bullFvgColor = input.color(color.lime, "Bullish FVG fill/border", group = "Colors - FVG")
+bearFvgColor = input.color(color.red, "Bearish FVG fill/border", group = "Colors - FVG")
 
-// ===== Constants / Colors =====
-ROLE_SUPPORT = 1
-ROLE_RESIST  = -1
-STATE_ACTIVE = 0
-STATE_BROKEN = 1
+// OB uses a clearly different palette from FVG so OB zones do not disappear inside imbalance boxes.
+bullObColor = input.color(color.aqua, "Bullish OB border/fill", group = "Colors - Order Blocks")
+bearObColor = input.color(color.fuchsia, "Bearish OB border/fill", group = "Colors - Order Blocks")
 
-KIND_LEVEL   = 0
-KIND_CONTEXT = 1
+sellSideSweepColor = input.color(color.lime, "SSL sweep marker", group = "Colors - Sweeps")
+buySideSweepColor = input.color(color.red, "BSL sweep marker", group = "Colors - Sweeps")
 
-FS_FRESH_VALIDATED = 0
-FS_FRESH_WEAK      = 1
-FS_MITIGATED       = 2
-FS_TRUE_TESTED     = 3
-FS_MULTI_TESTED    = 4
-FS_STALE           = 5
-FS_EXHAUSTED       = 6
+trapRiskColor = input.color(color.orange, "Trap-risk color", group = "Colors - Quality")
+weakZoneColor = input.color(color.gray, "Weak/old zone color", group = "Colors - Quality")
 
-ABS_LOW             = 0
-ABS_MEDIUM          = 1
-ABS_HIGH            = 2
-ABS_HIGH_REBUILDING = 3
+maxFvgZones = input.int(12, "Max FVG zones", minval = 1, maxval = 150, group = "Limits")
+maxObZones = input.int(12, "Max OB zones", minval = 1, maxval = 120, group = "Limits")
+maxLiquidityLevels = input.int(15, "Max liquidity levels", minval = 1, maxval = 100, group = "Limits")
+maxLabels = input.int(40, "Max labels", minval = 10, maxval = 200, group = "Limits")
 
-COMP_CLEAN          = 0
-COMP_OVERLAP        = 1
-COMP_TOUCHING       = 2
-COMP_TIGHT_GAP = 3
+// FVG geometry vs quality. Geometry creates the zone. Quality only describes it.
+atrLen = input.int(14, "ATR length", minval = 1)
+minGeometryGapTicks = input.int(1, "Min geometry gap in ticks", minval = 0)
+minStrongGapAtr = input.float(0.15, "Strong FVG min size as ATR", minval = 0.0, step = 0.05)
 
-REACT_NONE   = 0
-REACT_WEAK   = 1
-REACT_NORMAL = 2
-REACT_STRONG = 3
+// Middle-candle displacement quality.
+minBodyToRangeRatio = input.float(0.60, "Min body/range for displacement", minval = 0.0, maxval = 1.0, step = 0.05)
+minRangeAtrMultiple = input.float(1.20, "Min middle candle range as ATR", minval = 0.0, step = 0.05)
+minBullCloseLocationPct = input.float(0.70, "Bull displacement close location", minval = 0.0, maxval = 1.0, step = 0.05)
+maxBearCloseLocationPct = input.float(0.30, "Bear displacement close location", minval = 0.0, maxval = 1.0, step = 0.05)
 
-supportColor = color.rgb(27, 127, 73)
-resistColor  = color.rgb(180, 35, 24)
-brokenColor  = color.rgb(122, 79, 179)
-contextColor = color.rgb(146, 105, 34)
-conflictColor = color.rgb(245, 158, 11)
-priceColor   = color.rgb(17, 24, 39)
-hiddenColor  = color.new(color.gray, 100)
+// Structure relation quality.
+maxCandlesAfterBos = input.int(3, "Max candles after BOS for strong FVG", minval = 0, maxval = 20)
 
-// ===== Helpers =====
-f_fmt(float x) =>
-    str.tostring(x, format.mintick)
+// Nearby barrier/trap-risk visual flag. Uses already visible swing levels only.
+useBarrierFlags = input.bool(true, "Flag FVG near visible swing barrier")
+barrierMaxDistancePct = input.float(0.35, "Max barrier distance %", minval = 0.0, step = 0.05)
 
-f_mid(float lo, float hi) =>
-    (lo + hi) * 0.5
+// Order blocks.
+minObDisplacementAtr = input.float(0.25, "Min OB displacement as ATR", minval = 0.0, step = 0.05)
+obLookback = input.int(15, "OB origin lookback", minval = 1, maxval = 50)
 
-f_quality(int trueTests, int mitigations, int freshness) =>
-    freshness == FS_EXHAUSTED ? "EXHAUSTED" : trueTests >= 3 ? "STRONG" : trueTests >= 1 ? "MEDIUM" : mitigations > 0 ? "MITIGATED" : freshness == FS_FRESH_VALIDATED ? "FRESH" : "WEAK"
+// Lifecycle.
+reactionMaxBars = input.int(5, "Reaction max bars after touch", minval = 1, maxval = 50)
+reactionMode = input.string("Close beyond midpoint", "Reaction mode", options = ["Close beyond midpoint", "Close outside zone"])
+liquidityLineMode = input.string("Active", "Liquidity line mode", options = ["Active", "Historical"])
 
-f_fill_transp(int trueTests, int mitigations, int freshness) =>
-    freshness == FS_EXHAUSTED ? 96 : trueTests >= 3 ? 82 : trueTests >= 1 ? 88 : mitigations > 0 ? 92 : 94
+// Sweep quality/sensitivity. Close-back remains required for canonical sweep.
+minSweepDepthTicks = input.int(1, "Min sweep depth in ticks", minval = 0)
+minSweepWickToBodyRatio = input.float(0.50, "Min sweep wick/body ratio", minval = 0.0, step = 0.05)
 
-f_border_width(int trueTests, bool emphasized) =>
-    emphasized ? zoneBorderBase + 2 : trueTests >= 3 ? zoneBorderBase + 1 : zoneBorderBase
-
-f_role_name(int role) =>
-    role == ROLE_SUPPORT ? "support" : "resistance"
-
-f_role_color(int role, int state) =>
-    state == STATE_BROKEN ? brokenColor : role == ROLE_SUPPORT ? supportColor : resistColor
-
-f_reaction_strength(float reactionAtr) =>
-    reactionAtr >= strongReactionAtr ? REACT_STRONG : reactionAtr >= normalReactionAtr ? REACT_NORMAL : reactionAtr >= weakReactionAtr ? REACT_WEAK : REACT_NONE
-
-f_min_reaction_code() =>
-    trueTestMinReactionStrength == "STRONG" ? REACT_STRONG : trueTestMinReactionStrength == "NORMAL" ? REACT_NORMAL : REACT_WEAK
-
-f_meets_reaction(int reaction) =>
-    reaction >= f_min_reaction_code()
-
-f_fresh_short(int fs) =>
-    fs == FS_FRESH_VALIDATED ? "FRESH+" : fs == FS_FRESH_WEAK ? "FRESH?" : fs == FS_MITIGATED ? "MITIGATED" : fs == FS_TRUE_TESTED ? "TRUE TEST" : fs == FS_MULTI_TESTED ? "MULTI TEST" : fs == FS_STALE ? "STALE" : "EXHAUSTED"
-
-f_abs_short(int absRisk) =>
-    absRisk == ABS_HIGH_REBUILDING ? "RELOAD" : absRisk == ABS_HIGH ? "ABS HIGH" : absRisk == ABS_MEDIUM ? "ABS MED" : ""
-
-f_update_absorption(int trueTests, bool reloadLikely) =>
-    trueTests >= multiTestAbsorptionThreshold and reloadLikely ? ABS_HIGH_REBUILDING : trueTests >= multiTestAbsorptionThreshold ? ABS_HIGH : trueTests == 1 ? ABS_MEDIUM : ABS_LOW
-
-f_zone_age(int originBar) =>
-    math.max(0, bar_index - originBar)
-
-f_update_freshness(int currentFs, int trueTests, int mitigations, int noisy, int passThrough, int originBar, bool originValidated) =>
-    int age = f_zone_age(originBar)
-    passThrough >= 2 or noisy >= 3 ? FS_EXHAUSTED : trueTests >= 2 ? FS_MULTI_TESTED : trueTests == 1 ? FS_TRUE_TESTED : mitigations > 0 ? FS_MITIGATED : age >= staleUntouchedBars ? FS_STALE : originValidated ? FS_FRESH_VALIDATED : FS_FRESH_WEAK
-
-f_context_label(int role) =>
-    role == ROLE_SUPPORT ? "CTX support range\nnot S/R" : "CTX resistance range\nnot S/R"
-
-// ===== Storage =====
-var float[] zLow = array.new_float()
-var float[] zHigh = array.new_float()
-var int[]   zRole = array.new_int()
-var int[]   zState = array.new_int()
-var int[]   zKind = array.new_int()
-var int[]   zOriginTime = array.new_int()
-var int[]   zStartTime = array.new_int()
-var int[]   zBreakTime = array.new_int()
-var int[]   zOriginBar = array.new_int()
-var bool[]  zOriginValidated = array.new_bool()
-var bool[]  zFlipped = array.new_bool()
-var int[]   zMitigations = array.new_int()
-var int[]   zTrueTests = array.new_int()
-var int[]   zNoisySessions = array.new_int()
-var int[]   zPassThrough = array.new_int()
-var int[]   zFreshness = array.new_int()
-var int[]   zAbsorption = array.new_int()
-var bool[]  zReloadLikely = array.new_bool()
-var bool[]  zInTouch = array.new_bool()
-var bool[]  zTrueTestCounted = array.new_bool()
-var box[]   zBox = array.new_box()
-var label[] zLabel = array.new_label()
-
-var line priceLine = na
-var label priceLabel = na
-// S1/R1 overlap / no-clean-range helpers.
-// S1/R1 remain nearest structural truth. If they overlap/touch or leave too little
-// clean air gap, the visual marks a warning state and treats S2/R2 as outer map.
-f_zones_overlap(int a, int b) =>
-    float aLo = array.get(zLow, a)
-    float aHi = array.get(zHigh, a)
-    float bLo = array.get(zLow, b)
-    float bHi = array.get(zHigh, b)
-    math.max(aLo, bLo) <= math.min(aHi, bHi)
-
-f_min_clean_range_gap(float price, float atrValue) =>
-    math.max(syminfo.mintick * minCleanGapTicks, math.max(price * minCleanGapPct, nz(atrValue, 0.0) * minCleanGapAtr))
-
-f_no_clean_type(float cleanGap, float minGap) =>
-    float eps = math.max(syminfo.mintick * 0.1, 1e-10)
-    cleanGap < -eps ? COMP_OVERLAP : math.abs(cleanGap) <= eps ? COMP_TOUCHING : cleanGap <= minGap ? COMP_TIGHT_GAP : COMP_CLEAN
-
-f_no_clean_short(int compType) =>
-    compType == COMP_OVERLAP ? "OVERLAP" : compType == COMP_TOUCHING ? "TOUCHING" : compType == COMP_TIGHT_GAP ? "TIGHT GAP" : "CLEAN"
-
-f_no_clean_warning(int compType) =>
-    compType == COMP_OVERLAP ? "S1_R1_OVERLAP" : compType == COMP_TOUCHING ? "S1_R1_TOUCHING" : compType == COMP_TIGHT_GAP ? "NO_CLEAN_RANGE" : ""
-
-f_zone_visual_score(int i) =>
-    int fs = array.get(zFreshness, i)
-    float fsScore = fs == FS_MULTI_TESTED ? 6.0 : fs == FS_TRUE_TESTED ? 4.0 : fs == FS_FRESH_VALIDATED ? 3.0 : fs == FS_MITIGATED ? 2.0 : fs == FS_FRESH_WEAK ? 0.0 : fs == FS_STALE ? -3.0 : -8.0
-    (array.get(zFlipped, i) ? 8.0 : 0.0) + array.get(zTrueTests, i) * 4.0 + array.get(zMitigations, i) * 1.0 + fsScore - array.get(zNoisySessions, i) * 2.0 - array.get(zPassThrough, i) * 3.0
-
+//──────────────────────────────────────────────────────────────────────────────
+// Runtime helpers
+//──────────────────────────────────────────────────────────────────────────────
 atr = ta.atr(atrLen)
-barMs = na(time[1]) ? 0 : time - time[1]
-rightTime = time + barMs * rightPadBars
-labelTime = rightTime
+confirmedBar = barstate.isconfirmed
+isClean = displayMode == "Clean"
+isNormal = displayMode == "Normal"
+isDebug = displayMode == "Debug"
+isAudit = displayMode == "Audit"
 
-// ===== Per-bar lifecycle + v2.2 touch accounting =====
-if barstate.isconfirmed and array.size(zLow) > 0
-    for i = 0 to array.size(zLow) - 1
-        int st = array.get(zState, i)
-        int role = array.get(zRole, i)
-        float lo = array.get(zLow, i)
-        float hi = array.get(zHigh, i)
-        float breakBuffer = close * breakBufferPct / 100.0
+effectiveShowSwingLabels = isDebug ? showSwingLabels : isNormal ? showSwingLabels : false
+effectiveShowInvalidated = (isDebug or isAudit) ? showInvalidatedZones : isNormal ? showInvalidatedZones : false
+effectiveShowZoneStatusLabels = isDebug ? (showZoneStatusLabels or showFvgQualityLabels) : isAudit ? (showZoneStatusLabels or showFvgQualityLabels) : isNormal ? showFvgQualityLabels : false
+effectiveShowStructure = (isDebug or isAudit) ? showStructure : isNormal ? showStructure : false
+effectiveReactionMode = isClean ? "Close outside zone" : reactionMode
+effectiveShowContextBadge = showContextBadge
+showFvgEffective = showFvg and not showOnlyOb
+showSweepsEffective = showSweeps and sweepDisplay != "Off"
+showLiquidityEffective = showLiquidity and not showOnlyOb
+showMidpointsEffective = showMidpoints and midpointDisplay != "Off" and (midpointDisplay != "Debug only" or isDebug)
 
-        if st == STATE_ACTIVE
-            bool broken = role == ROLE_SUPPORT ? close < lo - breakBuffer : close > hi + breakBuffer
-            if broken
-                array.set(zState, i, STATE_BROKEN)
-                array.set(zBreakTime, i, time)
-                array.set(zPassThrough, i, array.get(zPassThrough, i) + 1)
-                array.set(zInTouch, i, false)
-                array.set(zTrueTestCounted, i, false)
-            else
-                bool touched = high >= lo and low <= hi
-                bool closedAway = role == ROLE_SUPPORT ? close > hi : close < lo
-                bool wasInTouch = array.get(zInTouch, i)
-                bool counted = array.get(zTrueTestCounted, i)
+f_safeDiv(float numerator, float denominator, float fallback) =>
+    denominator != 0.0 ? numerator / denominator : fallback
 
-                float moveAway = role == ROLE_SUPPORT ? math.max(0.0, close - hi) : math.max(0.0, lo - close)
-                float reactionAtr = nz(atr, 0.0) > 0 ? moveAway / atr : 0.0
-                int reaction = f_reaction_strength(reactionAtr)
-                bool trueTest = touched and closedAway and f_meets_reaction(reaction)
+f_boolText(bool value) =>
+    value ? "Y" : "N"
 
-                if touched and not wasInTouch
-                    array.set(zInTouch, i, true)
-                    array.set(zTrueTestCounted, i, false)
-                    array.set(zMitigations, i, array.get(zMitigations, i) + 1)
-                    counted := false
+f_legendTextSize() =>
+    legendTextSizeInput == "Normal" ? size.normal : legendTextSizeInput == "Small" ? size.small : size.tiny
 
-                if trueTest and not counted
-                    array.set(zTrueTests, i, array.get(zTrueTests, i) + 1)
-                    array.set(zTrueTestCounted, i, true)
-                    // In the visual script, true tests also serve as clean-touch strength.
+f_qualityVerdict(bool hasDisplacement, bool sizeStrong, bool formedAfterBos, bool trapRisk) =>
+    string verdict = "WEAK"
+    int passed = 0
+    passed += hasDisplacement ? 1 : 0
+    passed += sizeStrong ? 1 : 0
+    passed += formedAfterBos ? 1 : 0
+    verdict := trapRisk ? "TRAP_RISK" : passed >= 3 ? "STRONG" : passed >= 2 ? "ACCEPTABLE" : "WEAK"
+    verdict
 
-                if not touched and wasInTouch
-                    if not counted
-                        array.set(zNoisySessions, i, array.get(zNoisySessions, i) + 1)
-                    array.set(zInTouch, i, false)
-                    array.set(zTrueTestCounted, i, false)
+f_qualityFlags(bool hasDisplacement, bool sizeStrong, bool formedAfterBos, bool trapRisk) =>
+    string flags = ""
+    flags += hasDisplacement ? "DISPLACEMENT " : "WEAK_DISPLACEMENT "
+    flags += sizeStrong ? "SIZE_OK " : "SMALL_GAP "
+    flags += formedAfterBos ? "AFTER_BOS " : "NO_BOS "
+    flags += trapRisk ? "NEAR_BARRIER " : ""
+    flags
 
-                int tTests = array.get(zTrueTests, i)
-                int mits = array.get(zMitigations, i)
-                int noisy = array.get(zNoisySessions, i)
-                int passT = array.get(zPassThrough, i)
-                bool originOk = array.get(zOriginValidated, i)
-                int newFs = f_update_freshness(array.get(zFreshness, i), tTests, mits, noisy, passT, array.get(zOriginBar, i), originOk)
-                array.set(zFreshness, i, newFs)
+f_shouldRenderFvg(string verdict) =>
+    bool render = false
+    render := (isDebug or isAudit or zoneVisibilityMode == "Debug all detected") ? true : zoneVisibilityMode == "All valid" ? true : (verdict == "STRONG" or verdict == "ACCEPTABLE")
+    render
 
-                // Lightweight reload heuristic for visual use:
-                // repeated true tests + low noisy/pass-through pressure + price still closes away.
-                bool reload = tTests >= multiTestAbsorptionThreshold and noisy == 0 and passT == 0 and closedAway
-                array.set(zReloadLikely, i, reload)
-                array.set(zAbsorption, i, f_update_absorption(tTests, reload))
+f_legendPosition() =>
+    legendPositionInput == "Top left" ? position.top_left : legendPositionInput == "Bottom right" ? position.bottom_right : legendPositionInput == "Bottom left" ? position.bottom_left : position.top_right
 
-        else if st == STATE_BROKEN and array.get(zKind, i) == KIND_LEVEL
-            // Visual approximation of backend BROKEN -> FLIPPED semantics.
-            // Broken support can become flipped resistance only after retest from below + rejection.
-            // Broken resistance can become flipped support only after retest from above + hold.
-            bool touchedBroken = high >= lo and low <= hi
-            bool flippedToResistance = role == ROLE_SUPPORT and touchedBroken and close < lo - breakBuffer
-            bool flippedToSupport = role == ROLE_RESIST and touchedBroken and close > hi + breakBuffer
+f_zoneLabelText(string kind, bool bull, string status, string verdict, string flags, int touchCount, float mitigationPct) =>
+    string objectName = kind == "FVG" ? (bull ? "B-FVG" : "S-FVG") : (bull ? "B-OB" : "S-OB")
+    string txt = objectName
+    if kind == "FVG" and (isDebug or showFvgQualityLabels)
+        txt += " " + verdict
+    if kind == "OB" and showObLabels
+        txt += " " + status
+    if isDebug
+        txt += "\n" + status
+        txt += "\nTouches: " + str.tostring(touchCount)
+        txt += " Mit: " + str.tostring(math.round(mitigationPct * 100.0)) + "%"
+        if kind == "FVG"
+            txt += "\n" + flags
+    txt
 
-            if flippedToResistance or flippedToSupport
-                int newRole = flippedToResistance ? ROLE_RESIST : ROLE_SUPPORT
-                array.set(zRole, i, newRole)
-                array.set(zState, i, STATE_ACTIVE)
-                array.set(zStartTime, i, time)
-                array.set(zBreakTime, i, int(na))
-                array.set(zFlipped, i, true)
-                array.set(zOriginValidated, i, true)
-                array.set(zMitigations, i, array.get(zMitigations, i) + 1)
-                array.set(zTrueTests, i, array.get(zTrueTests, i) + 1)
-                array.set(zFreshness, i, FS_TRUE_TESTED)
-                array.set(zAbsorption, i, f_update_absorption(array.get(zTrueTests, i), false))
-                array.set(zInTouch, i, false)
-                array.set(zTrueTestCounted, i, false)
+//──────────────────────────────────────────────────────────────────────────────
+// Zone model
+//──────────────────────────────────────────────────────────────────────────────
+type SmiZone
+    box rect
+    line midLine
+    label tag
 
-// ===== Zone creation / merge =====
-f_add_or_merge_zone(int role, float rawLo, float rawHi, int originTime, int startTime, int originBar, float atrAtPivot, float pivotPrice, bool originValidated) =>
-    float rawMid = f_mid(rawLo, rawHi)
-    float rawWidthPct = rawMid > 0 ? (rawHi - rawLo) / rawMid * 100.0 : 0.0
-    bool isContext = rawWidthPct > rangeBoxWidthPct
-    bool shouldStore = not (isContext and wideZonePolicy == "Drop")
+    float low
+    float high
+    float mid
 
-    if shouldStore
-        int kind = isContext ? KIND_CONTEXT : KIND_LEVEL
-        float minW = math.max(syminfo.mintick * minWidthTicks, pivotPrice * minWidthPct / 100.0)
-        float atrCap = nz(atrAtPivot, rawHi - rawLo) * maxWidthAtr
-        float pctCap = pivotPrice * maxWidthPct / 100.0
-        float maxW = math.max(minW, math.max(atrCap, pctCap))
+    bool bull
+    bool invalidated
+    bool touched
+    bool midpointTouched
+    bool reacted
 
-        float lo = rawLo
-        float hi = rawHi
-        float w = hi - lo
+    string kind
 
-        // LEVEL_ZONE visual normalization. Context zones keep their full raw range
-        // and are hidden by default.
-        if kind == KIND_LEVEL
-            if w < minW
-                if role == ROLE_SUPPORT
-                    hi := lo + minW
+    int createdBar
+    int lastTouchedBar
+
+    // Lifecycle/freshness metadata.
+    int touchCount
+    int firstTouchedBar
+    float deepestMitigationPrice
+    float mitigationPct
+
+    // Primitive FVG quality metadata.
+    float gapAtrMultiple
+    float bodyToRangeRatio
+    float middleRangeAtrMultiple
+    float closeLocationPct
+
+    bool hasDisplacement
+    bool formedAfterBos
+    int candlesAfterBos
+
+    string qualityVerdict
+    string qualityFlags
+
+var SmiZone[] fvgZones = array.new<SmiZone>()
+var SmiZone[] obZones = array.new<SmiZone>()
+var line[] liquidityLines = array.new_line()
+var label[] chartLabels = array.new_label()
+
+// Cumulative visibility counters for legend/audit. They explain detected vs visible.
+var int fvgDetectedTotal = 0
+var int fvgVisibleTotal = 0
+var int fvgHiddenQualityTotal = 0
+var int obDetectedTotal = 0
+var int obVisibleTotal = 0
+var int zonesHiddenInvalidTotal = 0
+var int zonesHiddenMitigatedTotal = 0
+var int zonesHiddenAgeTotal = 0
+
+var float lastSwingHigh = na
+var float lastSwingLow = na
+var int lastSwingHighBar = na
+var int lastSwingLowBar = na
+var float previousSwingHigh = na
+var float previousSwingLow = na
+var bool highBroken = false
+var bool lowBroken = false
+var bool lastHighSwept = false
+var bool lastLowSwept = false
+var int lastBullObOriginBar = na
+var int lastBearObOriginBar = na
+var int structureBias = 0
+
+// Last visible BOS relation. Used only as quality metadata for new FVGs.
+var int lastBosBar = na
+var int lastBosDir = 0
+
+//──────────────────────────────────────────────────────────────────────────────
+// Drawing helpers
+//──────────────────────────────────────────────────────────────────────────────
+f_deleteZone(SmiZone z) =>
+    box.delete(z.rect)
+    if not na(z.midLine)
+        line.delete(z.midLine)
+    if not na(z.tag)
+        label.delete(z.tag)
+
+f_trimLabels() =>
+    while array.size(chartLabels) > maxLabels
+        oldLabel = array.shift(chartLabels)
+        label.delete(oldLabel)
+
+f_addLabel(int x, float y, string labelText, color bg, color textColor, style) =>
+    newLabel = label.new(x = x, y = y, text = labelText, style = style, color = bg, textcolor = textColor, size = size.tiny)
+    array.push(chartLabels, newLabel)
+    f_trimLabels()
+    newLabel
+
+f_addLiquidityLine(float level, bool buySide, int x) =>
+    if showLiquidityEffective
+        levelLine = line.new(x1 = x, y1 = level, x2 = bar_index, y2 = level, color = color.new(buySide ? color.red : color.green, 35), style = line.style_dashed)
+        array.push(liquidityLines, levelLine)
+        while array.size(liquidityLines) > maxLiquidityLevels
+            oldLine = array.shift(liquidityLines)
+            line.delete(oldLine)
+
+f_updateLiquidityLines() =>
+    if showLiquidityEffective and liquidityLineMode == "Active" and array.size(liquidityLines) > 0
+        for i = 0 to array.size(liquidityLines) - 1
+            liquidityLine = array.get(liquidityLines, i)
+            line.set_x2(liquidityLine, bar_index)
+
+f_trimZones(SmiZone[] zones, int maxCount) =>
+    while array.size(zones) > maxCount
+        oldZone = array.shift(zones)
+        f_deleteZone(oldZone)
+
+f_qualityColor(string verdict, bool bull) =>
+    color base = bull ? bullFvgColor : bearFvgColor
+    color out = base
+    out := verdict == "STRONG" ? color.new(base, 82) : verdict == "ACCEPTABLE" ? color.new(base, 88) : verdict == "TRAP_RISK" ? color.new(trapRiskColor, 86) : color.new(weakZoneColor, 90)
+    out
+
+f_qualityBorderColor(string verdict, bool bull) =>
+    color base = bull ? bullFvgColor : bearFvgColor
+    color out = base
+    out := verdict == "STRONG" ? color.new(base, 18) : verdict == "ACCEPTABLE" ? color.new(base, 42) : verdict == "TRAP_RISK" ? color.new(trapRiskColor, 15) : color.new(weakZoneColor, 45)
+    out
+
+f_addZone(SmiZone[] zones, int maxCount, string kind, bool bull, int leftBar, float zoneLow, float zoneHigh, string qualityVerdict, string qualityFlags, float gapAtrMultiple, float bodyToRangeRatio, float middleRangeAtrMultiple, float closeLocationPct, bool hasDisplacement, bool formedAfterBos, int candlesAfterBos) =>
+    color obBaseColor = bull ? bullObColor : bearObColor
+    zoneBoxColor = kind == "FVG" ? f_qualityColor(qualityVerdict, bull) : color.new(obBaseColor, 88)
+    zoneBorderColor = kind == "FVG" ? f_qualityBorderColor(qualityVerdict, bull) : color.new(obBaseColor, 0)
+    zoneBox = box.new(left = leftBar, top = zoneHigh, right = bar_index, bottom = zoneLow, bgcolor = zoneBoxColor, border_color = zoneBorderColor)
+    midpoint = (zoneLow + zoneHigh) / 2.0
+    bool midpointAllowed = showMidpointsEffective and (midpointDisplay == "All active" or isDebug or (kind == "FVG" and qualityVerdict == "STRONG"))
+    midpointLine = midpointAllowed ? line.new(x1 = leftBar, y1 = midpoint, x2 = bar_index, y2 = midpoint, color = color.new(color.gray, 35), style = line.style_dotted) : na
+    initialText = f_zoneLabelText(kind, bull, "PINE_CONTEXT_ONLY", qualityVerdict, qualityFlags, 0, 0.0)
+    bool shouldShowLabel = kind == "OB" ? showObLabels : effectiveShowZoneStatusLabels
+    zoneLabel = shouldShowLabel ? label.new(x = bar_index, y = zoneHigh, text = initialText, style = label.style_label_left, color = zoneBorderColor, textcolor = color.white, size = size.tiny) : na
+    zone = SmiZone.new(zoneBox, midpointLine, zoneLabel, zoneLow, zoneHigh, midpoint, bull, false, false, false, false, kind, bar_index, na, 0, na, na, 0.0, gapAtrMultiple, bodyToRangeRatio, middleRangeAtrMultiple, closeLocationPct, hasDisplacement, formedAfterBos, candlesAfterBos, qualityVerdict, qualityFlags)
+    array.push(zones, zone)
+    f_trimZones(zones, maxCount)
+
+f_updateZoneMitigation(SmiZone zone) =>
+    float zoneRange = zone.high - zone.low
+    float deepest = zone.deepestMitigationPrice
+    float mitigation = zone.mitigationPct
+    if zoneRange > 0
+        if zone.bull
+            deepest := na(deepest) ? low : math.min(deepest, low)
+            mitigation := math.max(0.0, math.min(1.0, (zone.high - deepest) / zoneRange))
+        else
+            deepest := na(deepest) ? high : math.max(deepest, high)
+            mitigation := math.max(0.0, math.min(1.0, (deepest - zone.low) / zoneRange))
+    [deepest, mitigation]
+
+f_updateZones(SmiZone[] zones) =>
+    midpointTouchedNow = false
+    invalidatedNow = false
+    reactionNow = false
+
+    if array.size(zones) > 0
+        zoneCount = array.size(zones)
+        for step = 0 to zoneCount - 1
+            i = zoneCount - 1 - step
+            zone = array.get(zones, i)
+
+            box.set_right(zone.rect, bar_index)
+            if not na(zone.midLine)
+                line.set_x2(zone.midLine, bar_index)
+            if not na(zone.tag)
+                label.set_x(zone.tag, bar_index)
+
+            eligibleForLifecycle = bar_index > zone.createdBar
+            touchedNow = eligibleForLifecycle and confirmedBar and not zone.invalidated and high >= zone.low and low <= zone.high
+            midNow = touchedNow and high >= zone.mid and low <= zone.mid
+            touchBarForReaction = touchedNow ? bar_index : zone.lastTouchedBar
+            recentTouch = not na(touchBarForReaction) and bar_index - touchBarForReaction <= reactionMaxBars
+
+            bullReactionMidpoint = recentTouch and close > zone.mid and close > open and close > zone.low
+            bearReactionMidpoint = recentTouch and close < zone.mid and close < open and close < zone.high
+            bullReactionOutside = recentTouch and close > zone.high and close > open
+            bearReactionOutside = recentTouch and close < zone.low and close < open
+            bullReaction = effectiveReactionMode == "Close outside zone" ? bullReactionOutside : bullReactionMidpoint
+            bearReaction = effectiveReactionMode == "Close outside zone" ? bearReactionOutside : bearReactionMidpoint
+
+            // Default invalidation: close beyond edge. Close inside zone is mitigation, not invalidation.
+            invalidNow = eligibleForLifecycle and confirmedBar and not zone.invalidated and (zone.bull ? close < zone.low : close > zone.high)
+            reactedNow = eligibleForLifecycle and confirmedBar and not zone.invalidated and not zone.reacted and (zone.bull ? bullReaction : bearReaction)
+
+            if touchedNow
+                if zone.touchCount == 0
+                    zone.firstTouchedBar := bar_index
+                zone.touchCount += 1
+                zone.touched := true
+                zone.lastTouchedBar := bar_index
+                [deepest, mitigation] = f_updateZoneMitigation(zone)
+                zone.deepestMitigationPrice := deepest
+                zone.mitigationPct := mitigation
+
+            if midNow
+                zone.midpointTouched := true
+                midpointTouchedNow := true
+
+            if reactedNow
+                zone.reacted := true
+                reactionNow := true
+                if not na(zone.tag)
+                    label.set_text(zone.tag, f_zoneLabelText(zone.kind, zone.bull, "PINE_REACTION_OBSERVED", zone.qualityVerdict, zone.qualityFlags, zone.touchCount, zone.mitigationPct))
+
+            if touchedNow and not reactedNow and not na(zone.tag)
+                label.set_text(zone.tag, f_zoneLabelText(zone.kind, zone.bull, "PINE_RETURNED", zone.qualityVerdict, zone.qualityFlags, zone.touchCount, zone.mitigationPct))
+
+            bool removedZone = false
+            if invalidNow
+                zone.invalidated := true
+                invalidatedNow := true
+                if effectiveShowInvalidated
+                    box.set_bgcolor(zone.rect, color.new(weakZoneColor, 88))
+                    box.set_border_color(zone.rect, color.new(weakZoneColor, 45))
+                    if not na(zone.midLine)
+                        line.set_color(zone.midLine, color.new(weakZoneColor, 55))
+                    if not na(zone.tag)
+                        label.set_text(zone.tag, f_zoneLabelText(zone.kind, zone.bull, "PINE_INVALIDATED", zone.qualityVerdict, zone.qualityFlags, zone.touchCount, zone.mitigationPct))
+                        label.set_color(zone.tag, color.new(weakZoneColor, 60))
                 else
-                    lo := hi - minW
+                    f_deleteZone(zone)
+                    array.remove(zones, i)
+                    removedZone := true
 
-            w := hi - lo
-            if w > maxW
-                if role == ROLE_SUPPORT
-                    hi := lo + maxW
-                else
-                    lo := hi - maxW
+            bool keepBecauseStrong = keepStrongZonesBeyondMaxAge and zone.kind == "FVG" and zone.qualityVerdict == "STRONG" and not zone.invalidated and zone.mitigationPct < mitigatedThresholdPct
+            bool expiredByAge = not removedZone and not isDebug and not isAudit and maxZoneAgeBars > 0 and bar_index - zone.createdBar > maxZoneAgeBars and not keepBecauseStrong
+            bool hiddenMitigated = not removedZone and not isDebug and not isAudit and not showMitigatedZones and zone.touched and zone.mitigationPct >= mitigatedThresholdPct
+            if expiredByAge or hiddenMitigated
+                f_deleteZone(zone)
+                array.remove(zones, i)
+                removedZone := true
 
-        bool merged = false
-        if allowMerge and array.size(zLow) > 0
-            for j = 0 to array.size(zLow) - 1
-                if not merged
-                    int existingRole = array.get(zRole, j)
-                    int existingState = array.get(zState, j)
-                    int existingKind = array.get(zKind, j)
-                    int existingBar = array.get(zOriginBar, j)
-                    if existingRole == role and existingState == STATE_ACTIVE and existingKind == kind and math.abs(originBar - existingBar) <= maxMergeBars
-                        float eLo = array.get(zLow, j)
-                        float eHi = array.get(zHigh, j)
-                        float mid = f_mid(lo, hi)
-                        float eMid = f_mid(eLo, eHi)
-                        float prox = math.max(pivotPrice * mergeBps / 10000.0, nz(atrAtPivot, hi - lo) * mergeAtrMult)
-                        bool overlaps = lo <= eHi and hi >= eLo
-                        bool closeEnough = math.abs(mid - eMid) <= prox
+            if not removedZone
+                array.set(zones, i, zone)
 
-                        if overlaps or closeEnough
-                            float mLo = math.min(lo, eLo)
-                            float mHi = math.max(hi, eHi)
-                            float mWidth = mHi - mLo
-                            bool canMergeWidth = kind == KIND_CONTEXT ? true : mWidth <= maxW * mergeMaxWidthMult
-                            if canMergeWidth
-                                array.set(zLow, j, mLo)
-                                array.set(zHigh, j, mHi)
-                                array.set(zOriginTime, j, math.min(array.get(zOriginTime, j), originTime))
-                                array.set(zStartTime, j, math.min(array.get(zStartTime, j), startTime))
-                                array.set(zOriginBar, j, math.min(array.get(zOriginBar, j), originBar))
-                                array.set(zOriginValidated, j, array.get(zOriginValidated, j) or originValidated)
-                                array.set(zFlipped, j, array.get(zFlipped, j))
-                                // Extra nearby candidate strengthens origin context, but it is not a true test.
-                                merged := true
+    [midpointTouchedNow, invalidatedNow, reactionNow]
 
-        if not merged
-            box b = box.new(left=startTime, top=hi, right=rightTime, bottom=lo, xloc=xloc.bar_time, bgcolor=hiddenColor, border_color=hiddenColor, border_width=1)
-            label l = label.new(x=labelTime, y=f_mid(lo, hi), text="", xloc=xloc.bar_time, style=label.style_label_left, color=hiddenColor, textcolor=hiddenColor, size=size.tiny)
-            array.push(zLow, lo)
-            array.push(zHigh, hi)
-            array.push(zRole, role)
-            array.push(zState, STATE_ACTIVE)
-            array.push(zKind, kind)
-            array.push(zOriginTime, originTime)
-            array.push(zStartTime, startTime)
-            array.push(zBreakTime, int(na))
-            array.push(zOriginBar, originBar)
-            array.push(zOriginValidated, originValidated)
-            array.push(zFlipped, false)
-            array.push(zMitigations, 0)
-            array.push(zTrueTests, 0)
-            array.push(zNoisySessions, 0)
-            array.push(zPassThrough, 0)
-            array.push(zFreshness, originValidated ? FS_FRESH_VALIDATED : FS_FRESH_WEAK)
-            array.push(zAbsorption, ABS_LOW)
-            array.push(zReloadLikely, false)
-            array.push(zInTouch, false)
-            array.push(zTrueTestCounted, false)
-            array.push(zBox, b)
-            array.push(zLabel, l)
+f_findBullObOffset(int maxBack) =>
+    int found = na
+    for i = 1 to maxBack
+        if na(found) and close[i] < open[i]
+            found := i
+    found
 
-        // Keep object count bounded.
-        while array.size(zLow) > maxStoredZones
-            box oldBox = array.shift(zBox)
-            label oldLabel = array.shift(zLabel)
-            box.delete(oldBox)
-            label.delete(oldLabel)
-            array.shift(zLow)
-            array.shift(zHigh)
-            array.shift(zRole)
-            array.shift(zState)
-            array.shift(zKind)
-            array.shift(zOriginTime)
-            array.shift(zStartTime)
-            array.shift(zBreakTime)
-            array.shift(zOriginBar)
-            array.shift(zOriginValidated)
-            array.shift(zFlipped)
-            array.shift(zMitigations)
-            array.shift(zTrueTests)
-            array.shift(zNoisySessions)
-            array.shift(zPassThrough)
-            array.shift(zFreshness)
-            array.shift(zAbsorption)
-            array.shift(zReloadLikely)
-            array.shift(zInTouch)
-            array.shift(zTrueTestCounted)
+f_findBearObOffset(int maxBack) =>
+    int found = na
+    for i = 1 to maxBack
+        if na(found) and close[i] > open[i]
+            found := i
+    found
 
-// Confirmed pivot high -> resistance wick/body zone.
-ph = ta.pivothigh(high, pivotLeft, pivotRight)
-if barstate.isconfirmed and not na(ph)
-    float pivotHigh = high[pivotRight]
-    float bodyTop = math.max(open[pivotRight], close[pivotRight])
-    int originT = time[pivotRight]
-    int startT = startMode == "Pivot candle" ? time[pivotRight] : time
-    int originB = bar_index - pivotRight
-    float atrPivot = nz(atr[pivotRight], pivotHigh - bodyTop)
-    float moveAway = math.max(0.0, bodyTop - close)
-    bool originValidated = atrPivot > 0 ? moveAway / atrPivot >= originDisplacementAtrThreshold : false
-    f_add_or_merge_zone(ROLE_RESIST, bodyTop, pivotHigh, originT, startT, originB, atrPivot, close[pivotRight], originValidated)
+//──────────────────────────────────────────────────────────────────────────────
+// Swing structure
+//──────────────────────────────────────────────────────────────────────────────
+ph = ta.pivothigh(high, swingLen, swingLen)
+pl = ta.pivotlow(low, swingLen, swingLen)
 
-// Confirmed pivot low -> support wick/body zone.
-pl = ta.pivotlow(low, pivotLeft, pivotRight)
-if barstate.isconfirmed and not na(pl)
-    float pivotLow = low[pivotRight]
-    float bodyBottom = math.min(open[pivotRight], close[pivotRight])
-    int originT = time[pivotRight]
-    int startT = startMode == "Pivot candle" ? time[pivotRight] : time
-    int originB = bar_index - pivotRight
-    float atrPivot = nz(atr[pivotRight], bodyBottom - pivotLow)
-    float moveAway = math.max(0.0, close - bodyBottom)
-    bool originValidated = atrPivot > 0 ? moveAway / atrPivot >= originDisplacementAtrThreshold : false
-    f_add_or_merge_zone(ROLE_SUPPORT, pivotLow, bodyBottom, originT, startT, originB, atrPivot, close[pivotRight], originValidated)
+if confirmedBar and not na(ph)
+    previousSwingHigh := lastSwingHigh
+    lastSwingHigh := ph
+    lastSwingHighBar := bar_index - swingLen
+    highBroken := false
+    lastHighSwept := false
+    f_addLiquidityLine(lastSwingHigh, true, lastSwingHighBar)
+    if effectiveShowSwingLabels
+        swingText = not na(previousSwingHigh) and lastSwingHigh > previousSwingHigh ? "HH" : "LH"
+        f_addLabel(lastSwingHighBar, lastSwingHigh, swingText, color.new(color.red, 65), color.white, label.style_label_down)
 
-// ===== Resolve nearest active actionable S/R levels =====
-int s1 = -1
-int s2 = -1
-int s3 = -1
-int r1 = -1
-int r2 = -1
-int r3 = -1
-float sd1 = 1e20
-float sd2 = 1e20
-float sd3 = 1e20
-float rd1 = 1e20
-float rd2 = 1e20
-float rd3 = 1e20
+if confirmedBar and not na(pl)
+    previousSwingLow := lastSwingLow
+    lastSwingLow := pl
+    lastSwingLowBar := bar_index - swingLen
+    lowBroken := false
+    lastLowSwept := false
+    f_addLiquidityLine(lastSwingLow, false, lastSwingLowBar)
+    if effectiveShowSwingLabels
+        swingText = not na(previousSwingLow) and lastSwingLow > previousSwingLow ? "HL" : "LL"
+        f_addLabel(lastSwingLowBar, lastSwingLow, swingText, color.new(color.green, 65), color.white, label.style_label_up)
 
-if array.size(zLow) > 0
-    for i = 0 to array.size(zLow) - 1
-        int st = array.get(zState, i)
-        int role = array.get(zRole, i)
-        int kind = array.get(zKind, i)
-        int fs = array.get(zFreshness, i)
-        float lo = array.get(zLow, i)
-        float hi = array.get(zHigh, i)
+bosBull = confirmedBar and not na(lastSwingHigh) and not highBroken and close > lastSwingHigh
+bosBear = confirmedBar and not na(lastSwingLow) and not lowBroken and close < lastSwingLow
+chochBull = bosBull and structureBias < 0
+chochBear = bosBear and structureBias > 0
 
-        bool actionable = st == STATE_ACTIVE and kind == KIND_LEVEL and fs != FS_EXHAUSTED
-        if actionable
-            if role == ROLE_SUPPORT and close >= lo
-                float d = close <= hi ? 0.0 : close - hi
-                if d < sd1
-                    s3 := s2
-                    sd3 := sd2
-                    s2 := s1
-                    sd2 := sd1
-                    s1 := i
-                    sd1 := d
-                else if d < sd2 and i != s1
-                    s3 := s2
-                    sd3 := sd2
-                    s2 := i
-                    sd2 := d
-                else if d < sd3 and i != s1 and i != s2
-                    s3 := i
-                    sd3 := d
+if bosBull
+    highBroken := true
+    structureBias := 1
+    lastBosBar := bar_index
+    lastBosDir := 1
+    if effectiveShowStructure
+        f_addLabel(bar_index, high, chochBull ? "CHoCH up" : "BOS up", color.new(color.green, 45), color.white, label.style_label_up)
 
-            if role == ROLE_RESIST and close <= hi
-                float d = close >= lo ? 0.0 : lo - close
-                if d < rd1
-                    r3 := r2
-                    rd3 := rd2
-                    r2 := r1
-                    rd2 := rd1
-                    r1 := i
-                    rd1 := d
-                else if d < rd2 and i != r1
-                    r3 := r2
-                    rd3 := rd2
-                    r2 := i
-                    rd2 := d
-                else if d < rd3 and i != r1 and i != r2
-                    r3 := i
-                    rd3 := d
+if bosBear
+    lowBroken := true
+    structureBias := -1
+    lastBosBar := bar_index
+    lastBosDir := -1
+    if effectiveShowStructure
+        f_addLabel(bar_index, low, chochBear ? "CHoCH down" : "BOS down", color.new(color.red, 45), color.white, label.style_label_down)
 
-// S1/R1 conflict classification. Do not promote S2/R2 into S1/R1.
-// If there is no clean S1/R1 range, S1/R1 still remain nearest zones, while S2/R2 are outer map.
-float srCleanGap = na
-float srMinCleanGap = na
-int srNoCleanType = COMP_CLEAN
-bool srNoCleanRange = false
-string srNoCleanNote = ""
+//──────────────────────────────────────────────────────────────────────────────
+// FVG geometry + primitive quality
+//──────────────────────────────────────────────────────────────────────────────
+bullFvgGap = bar_index >= 2 ? low - high[2] : na
+bearFvgGap = bar_index >= 2 ? low[2] - high : na
 
-if s1 != -1 and r1 != -1
-    srCleanGap := array.get(zLow, r1) - array.get(zHigh, s1)
-    srMinCleanGap := f_min_clean_range_gap(close, atr)
-    srNoCleanType := f_no_clean_type(srCleanGap, srMinCleanGap)
-    srNoCleanRange := srNoCleanType != COMP_CLEAN
-    if srNoCleanRange
-        srNoCleanNote := "S/R conflict - no clean range"
+minGeometryGap = syminfo.mintick * minGeometryGapTicks
 
-// Public-style visual handling for overlapping nearest S/R:
-// keep S1/R1 as structural truth, but avoid rendering two overlapping clean boxes by default.
-int srConflictVisibleIdx = -1
-int srConflictSuppressedIdx = -1
-if srNoCleanRange and s1 != -1 and r1 != -1 and srConflictDisplayMode == "Strongest only"
-    bool sContains = close >= array.get(zLow, s1) and close <= array.get(zHigh, s1)
-    bool rContains = close >= array.get(zLow, r1) and close <= array.get(zHigh, r1)
-    float sScore = f_zone_visual_score(s1)
-    float rScore = f_zone_visual_score(r1)
-    bool showSupport = sContains and not rContains ? true : rContains and not sContains ? false : sScore >= rScore
-    srConflictVisibleIdx := showSupport ? s1 : r1
-    srConflictSuppressedIdx := showSupport ? r1 : s1
+bullFvgGeometry = confirmedBar and showFvgEffective and bar_index >= 2 and high[2] < low and bullFvgGap >= minGeometryGap
+bearFvgGeometry = confirmedBar and showFvgEffective and bar_index >= 2 and low[2] > high and bearFvgGap >= minGeometryGap
 
-// ===== Hide all boxes/labels before rendering selection =====
-if array.size(zLow) > 0
-    for i = 0 to array.size(zLow) - 1
-        box b = array.get(zBox, i)
-        label l = array.get(zLabel, i)
-        box.set_bgcolor(b, hiddenColor)
-        box.set_border_color(b, hiddenColor)
-        box.set_border_width(b, 1)
-        box.set_border_style(b, line.style_solid)
-        label.set_text(l, "")
-        label.set_color(l, hiddenColor)
-        label.set_textcolor(l, hiddenColor)
+middleBody = bar_index >= 2 ? math.abs(close[1] - open[1]) : na
+middleRange = bar_index >= 2 ? high[1] - low[1] : na
+bodyToRangeRatio = not na(middleRange) ? f_safeDiv(middleBody, middleRange, 0.0) : na
+middleRangeAtrMultiple = not na(middleRange) and atr > 0 ? middleRange / atr : na
+closeLocationPct = not na(middleRange) ? f_safeDiv(close[1] - low[1], middleRange, 0.5) : na
 
+bullDisplacement = bar_index >= 2 and close[1] > open[1] and bodyToRangeRatio >= minBodyToRangeRatio and middleRangeAtrMultiple >= minRangeAtrMultiple and closeLocationPct >= minBullCloseLocationPct
+bearDisplacement = bar_index >= 2 and close[1] < open[1] and bodyToRangeRatio >= minBodyToRangeRatio and middleRangeAtrMultiple >= minRangeAtrMultiple and closeLocationPct <= maxBearCloseLocationPct
 
-// Build render selection.
-var int[] renderIdx = array.new_int()
-var string[] renderName = array.new_string()
-array.clear(renderIdx)
-array.clear(renderName)
+bullGapAtrMultiple = atr > 0 ? bullFvgGap / atr : na
+bearGapAtrMultiple = atr > 0 ? bearFvgGap / atr : na
+bullSizeStrong = not na(bullGapAtrMultiple) and bullGapAtrMultiple >= minStrongGapAtr
+bearSizeStrong = not na(bearGapAtrMultiple) and bearGapAtrMultiple >= minStrongGapAtr
 
-bool conflictStrongestOnly = srNoCleanRange and srConflictDisplayMode == "Strongest only"
-bool suppressS1Visual = conflictStrongestOnly and srConflictSuppressedIdx == s1
-bool suppressR1Visual = conflictStrongestOnly and srConflictSuppressedIdx == r1
-bool drawOuterDuringConflict = srNoCleanRange and showNoCleanRangeOuter
-bool allowNormalExtraLevels = not conflictStrongestOnly
+bullFormedAfterBos = not na(lastBosBar) and lastBosDir == 1 and bar_index - lastBosBar <= maxCandlesAfterBos
+bearFormedAfterBos = not na(lastBosBar) and lastBosDir == -1 and bar_index - lastBosBar <= maxCandlesAfterBos
+bullCandlesAfterBos = bullFormedAfterBos ? bar_index - lastBosBar : na
+bearCandlesAfterBos = bearFormedAfterBos ? bar_index - lastBosBar : na
 
-// In strongest-only conflict mode, draw only the chosen nearest S/R zone.
-// S2/R2 remain outer references in the price label and are not drawn unless the debug input is enabled.
-if s1 != -1 and not suppressS1Visual
-    array.push(renderIdx, s1)
-    array.push(renderName, "S1")
-if s2 != -1 and ((allowNormalExtraLevels and levelsPerSide >= 2) or drawOuterDuringConflict)
-    array.push(renderIdx, s2)
-    array.push(renderName, "S2")
-if s3 != -1 and allowNormalExtraLevels and levelsPerSide >= 3
-    array.push(renderIdx, s3)
-    array.push(renderName, "S3")
+// Simple visible-barrier flag from current known swings.
+bullNearBarrier = useBarrierFlags and not na(lastSwingHigh) and lastSwingHigh > low and ((lastSwingHigh - low) / low) * 100.0 <= barrierMaxDistancePct
+bearNearBarrier = useBarrierFlags and not na(lastSwingLow) and lastSwingLow < high and ((high - lastSwingLow) / high) * 100.0 <= barrierMaxDistancePct
 
-if r1 != -1 and not suppressR1Visual
-    array.push(renderIdx, r1)
-    array.push(renderName, "R1")
-if r2 != -1 and ((allowNormalExtraLevels and levelsPerSide >= 2) or drawOuterDuringConflict)
-    array.push(renderIdx, r2)
-    array.push(renderName, "R2")
-if r3 != -1 and allowNormalExtraLevels and levelsPerSide >= 3
-    array.push(renderIdx, r3)
-    array.push(renderName, "R3")
+bullQualityVerdict = f_qualityVerdict(bullDisplacement, bullSizeStrong, bullFormedAfterBos, bullNearBarrier)
+bearQualityVerdict = f_qualityVerdict(bearDisplacement, bearSizeStrong, bearFormedAfterBos, bearNearBarrier)
+bullQualityFlags = f_qualityFlags(bullDisplacement, bullSizeStrong, bullFormedAfterBos, bullNearBarrier)
+bearQualityFlags = f_qualityFlags(bearDisplacement, bearSizeStrong, bearFormedAfterBos, bearNearBarrier)
 
-// No synthetic no-clean-range box is rendered.
-// Default conflict display follows common public S/R scripts: show one stronger/relevant zone and warn.
-// S2/R2 are only label references by default during conflict; enabling the debug input can draw them.
+bullFvgStrong = bullFvgGeometry and bullQualityVerdict == "STRONG"
+bearFvgStrong = bearFvgGeometry and bearQualityVerdict == "STRONG"
 
-// Optional context/range box visibility. Hidden by default.
-string insideContext = ""
-if showContextZones and array.size(zLow) > 0
-    for i = 0 to array.size(zLow) - 1
-        if array.get(zKind, i) == KIND_CONTEXT and array.get(zState, i) == STATE_ACTIVE
-            int role = array.get(zRole, i)
-            float lo = array.get(zLow, i)
-            float hi = array.get(zHigh, i)
-            box b = array.get(zBox, i)
-            label l = array.get(zLabel, i)
-            int leftT = array.get(zStartTime, i)
+bullFvgRenderable = bullFvgGeometry and f_shouldRenderFvg(bullQualityVerdict)
+bearFvgRenderable = bearFvgGeometry and f_shouldRenderFvg(bearQualityVerdict)
 
-            box.set_left(b, leftT)
-            box.set_right(b, rightTime)
-            box.set_top(b, hi)
-            box.set_bottom(b, lo)
-            box.set_bgcolor(b, color.new(contextColor, 94))
-            box.set_border_color(b, color.new(contextColor, 35))
-            box.set_border_style(b, line.style_dashed)
-            box.set_border_width(b, 1)
-
-            if close >= lo and close <= hi
-                insideContext := "CTX"
-
-            if showZoneLabels
-                label.set_x(l, labelTime)
-                label.set_y(l, f_mid(lo, hi))
-                label.set_text(l, f_context_label(role) + "\n" + f_fmt(lo) + " - " + f_fmt(hi))
-                label.set_color(l, color.new(contextColor, 0))
-                label.set_textcolor(l, color.white)
-                label.set_size(l, size.tiny)
-
-// Optional broken LEVEL-zone visibility is conservative and separate from S/R selection.
-if showBroken and array.size(zLow) > 0
-    for i = 0 to array.size(zLow) - 1
-        if array.get(zState, i) == STATE_BROKEN and array.get(zKind, i) == KIND_LEVEL
-            float lo = array.get(zLow, i)
-            float hi = array.get(zHigh, i)
-            box b = array.get(zBox, i)
-            int leftT = array.get(zStartTime, i)
-            int endT = array.get(zBreakTime, i)
-            int rightT = na(endT) ? time : endT
-            box.set_left(b, leftT)
-            box.set_right(b, rightT)
-            box.set_top(b, hi)
-            box.set_bottom(b, lo)
-            box.set_bgcolor(b, color.new(brokenColor, 92))
-            box.set_border_color(b, color.new(brokenColor, 30))
-            box.set_border_style(b, line.style_dashed)
-            box.set_border_width(b, 1)
-
-// Render selected S/R levels.
-string insideName = ""
-if array.size(renderIdx) > 0
-    for k = 0 to array.size(renderIdx) - 1
-        int i = array.get(renderIdx, k)
-        string levelName = array.get(renderName, k)
-        int role = array.get(zRole, i)
-        int st = array.get(zState, i)
-        float lo = array.get(zLow, i)
-        float hi = array.get(zHigh, i)
-        int trueTests = array.get(zTrueTests, i)
-        int mitigations = array.get(zMitigations, i)
-        int fs = array.get(zFreshness, i)
-        int absRisk = array.get(zAbsorption, i)
-        box b = array.get(zBox, i)
-        label l = array.get(zLabel, i)
-
-        bool emphasized = levelName == "S1" or levelName == "R1"
-        bool srConflictCore = srNoCleanRange and (i == s1 or i == r1) and emphasized
-        bool srConflictSuppressed = srNoCleanRange and srConflictDisplayMode == "Strongest only" and i == srConflictSuppressedIdx
-        bool srConflictOuter = srNoCleanRange and (i == s2 or i == r2) and (levelName == "S2" or levelName == "R2")
-        color base = f_role_color(role, st)
-        color borderBase = base
-        int fillTrans = f_fill_transp(trueTests, mitigations, fs)
-        string q = f_quality(trueTests, mitigations, fs)
-        string roleText = f_role_name(role)
-
-        int leftT = array.get(zStartTime, i)
-        int rightT = st == STATE_ACTIVE ? rightTime : nz(array.get(zBreakTime, i), time)
-
-        box.set_left(b, leftT)
-        box.set_right(b, rightT)
-        box.set_top(b, hi)
-        box.set_bottom(b, lo)
-        box.set_bgcolor(b, color.new(base, fillTrans))
-        box.set_border_color(b, color.new(borderBase, emphasized ? 0 : 15))
-        box.set_border_style(b, trueTests == 0 ? line.style_dashed : line.style_solid)
-        box.set_border_width(b, f_border_width(trueTests, emphasized))
-
-        if close >= lo and close <= hi
-            insideName := levelName
-
-        if showZoneLabels
-            float y = f_mid(lo, hi)
-            // Small deterministic vertical offset to reduce label overlap when S/R are tight.
-            float yOffset = (k % 2 == 0 ? 1.0 : -1.0) * syminfo.mintick * 8.0
-            string absText = f_abs_short(absRisk)
-            string flipText = array.get(zFlipped, i) ? "FLIPPED" : ""
-            string metaText = f_fresh_short(fs) + (flipText != "" ? " / " + flipText : "") + (absText != "" ? " / " + absText : "")
-            string hintText = showV22Hints ? "\n" + metaText : ""
-            string conflictText = srConflictOuter ? "\nOUTER MAP" : ""
-            label.set_x(l, labelTime)
-            label.set_y(l, y + yOffset)
-            label.set_text(l, levelName + "\n" + q + " " + roleText + hintText + conflictText + "\n" + f_fmt(lo) + " - " + f_fmt(hi))
-            label.set_color(l, color.new(base, 0))
-            label.set_textcolor(l, color.white)
-            label.set_size(l, size.tiny)
-
-// ===== Current price line / label =====
-if showPriceLabel
-    if na(priceLine)
-        priceLine := line.new(x1=time, y1=close, x2=rightTime, y2=close, xloc=xloc.bar_time, color=priceColor, width=1)
+if bullFvgGeometry
+    fvgDetectedTotal += 1
+    if bullFvgRenderable
+        fvgVisibleTotal += 1
     else
-        line.set_x1(priceLine, time)
-        line.set_y1(priceLine, close)
-        line.set_x2(priceLine, rightTime)
-        line.set_y2(priceLine, close)
-        line.set_color(priceLine, priceColor)
+        fvgHiddenQualityTotal += 1
 
-    string contextText = showContextInPriceLabel and insideContext != "" and insideName == "" ? "\ninside context" : ""
-    string suppressedName = srNoCleanRange and srConflictDisplayMode == "Strongest only" ? (srConflictSuppressedIdx == s1 ? "S1 hidden" : srConflictSuppressedIdx == r1 ? "R1 hidden" : "") : ""
-    string outerRefsText = "\nouter refs: " + (s2 != -1 ? "S2" : "-") + " / " + (r2 != -1 ? "R2" : "-") + (showNoCleanRangeOuter ? "" : " (not drawn)")
-    string noCleanDetail = srNoCleanRange ? "\n" + srNoCleanNote + "\n" + f_no_clean_warning(srNoCleanType) + " / " + f_no_clean_short(srNoCleanType) + "\ngap " + f_fmt(srCleanGap) + " / min " + f_fmt(srMinCleanGap) + (suppressedName != "" ? "\n" + suppressedName + " visually" : "") + outerRefsText : ""
-    string ptxt = "PRICE " + f_fmt(close) + (insideName != "" ? "\ninside " + insideName : contextText) + noCleanDetail
-    if na(priceLabel)
-        priceLabel := label.new(x=labelTime, y=close, text=ptxt, xloc=xloc.bar_time, style=label.style_label_left, color=priceColor, textcolor=color.white, size=size.small)
+if bearFvgGeometry
+    fvgDetectedTotal += 1
+    if bearFvgRenderable
+        fvgVisibleTotal += 1
     else
-        label.set_x(priceLabel, labelTime)
-        label.set_y(priceLabel, close)
-        label.set_text(priceLabel, ptxt)
-        label.set_color(priceLabel, priceColor)
-        label.set_textcolor(priceLabel, color.white)
-        label.set_size(priceLabel, size.small)
-else
-    if not na(priceLine)
-        line.set_color(priceLine, hiddenColor)
-    if not na(priceLabel)
-        label.set_text(priceLabel, "")
-        label.set_color(priceLabel, hiddenColor)
-        label.set_textcolor(priceLabel, hiddenColor)
+        fvgHiddenQualityTotal += 1
+
+if bullFvgRenderable
+    f_addZone(fvgZones, maxFvgZones, "FVG", true, bar_index - 2, high[2], low, bullQualityVerdict, bullQualityFlags, bullGapAtrMultiple, bodyToRangeRatio, middleRangeAtrMultiple, closeLocationPct, bullDisplacement, bullFormedAfterBos, bullCandlesAfterBos)
+
+if bearFvgRenderable
+    f_addZone(fvgZones, maxFvgZones, "FVG", false, bar_index - 2, high, low[2], bearQualityVerdict, bearQualityFlags, bearGapAtrMultiple, bodyToRangeRatio, middleRangeAtrMultiple, closeLocationPct, bearDisplacement, bearFormedAfterBos, bearCandlesAfterBos)
+
+//──────────────────────────────────────────────────────────────────────────────
+// Order block detection
+//──────────────────────────────────────────────────────────────────────────────
+bullObOffset = bosBull and math.abs(close - open) >= atr * minObDisplacementAtr ? f_findBullObOffset(obLookback) : na
+bearObOffset = bosBear and math.abs(close - open) >= atr * minObDisplacementAtr ? f_findBearObOffset(obLookback) : na
+
+if showOb and not na(bullObOffset)
+    obDetectedTotal += 1
+    obLow = low[bullObOffset]
+    obHigh = high[bullObOffset]
+    bullOriginBar = bar_index - bullObOffset
+    if bullOriginBar != lastBullObOriginBar
+        f_addZone(obZones, maxObZones, "OB", true, bullOriginBar, obLow, obHigh, "N/A", "", na, na, na, na, false, false, na)
+        obVisibleTotal += 1
+        lastBullObOriginBar := bullOriginBar
+
+if showOb and not na(bearObOffset)
+    obDetectedTotal += 1
+    obLow = low[bearObOffset]
+    obHigh = high[bearObOffset]
+    bearOriginBar = bar_index - bearObOffset
+    if bearOriginBar != lastBearObOriginBar
+        f_addZone(obZones, maxObZones, "OB", false, bearOriginBar, obLow, obHigh, "N/A", "", na, na, na, na, false, false, na)
+        obVisibleTotal += 1
+        lastBearObOriginBar := bearOriginBar
+
+//──────────────────────────────────────────────────────────────────────────────
+// Liquidity sweeps. Close-back is required; wick/body and depth are primitive filters.
+//──────────────────────────────────────────────────────────────────────────────
+body = math.abs(close - open)
+upperWick = high - math.max(open, close)
+lowerWick = math.min(open, close) - low
+
+sellSweepDepth = not na(lastSwingLow) ? lastSwingLow - low : na
+buySweepDepth = not na(lastSwingHigh) ? high - lastSwingHigh : na
+sellSweepDepthPass = not na(sellSweepDepth) and sellSweepDepth >= syminfo.mintick * minSweepDepthTicks
+buySweepDepthPass = not na(buySweepDepth) and buySweepDepth >= syminfo.mintick * minSweepDepthTicks
+sellWickPass = body > 0 ? lowerWick / body >= minSweepWickToBodyRatio : lowerWick > 0
+buyWickPass = body > 0 ? upperWick / body >= minSweepWickToBodyRatio : upperWick > 0
+
+sellSideSweepRaw = confirmedBar and not na(lastSwingLow) and not lastLowSwept and low < lastSwingLow and close > lastSwingLow and sellSweepDepthPass and sellWickPass
+buySideSweepRaw = confirmedBar and not na(lastSwingHigh) and not lastHighSwept and high > lastSwingHigh and close < lastSwingHigh and buySweepDepthPass and buyWickPass
+
+if sellSideSweepRaw
+    lastLowSwept := true
+if buySideSweepRaw
+    lastHighSwept := true
+
+sellSideSweep = sellSideSweepRaw and showSweepsEffective and showSellSideSweeps
+buySideSweep = buySideSweepRaw and showSweepsEffective and showBuySideSweeps
+
+plotshape(sellSideSweep and sweepDisplay == "Labels", title = "SMI Sell-side Sweep Label", style = shape.triangleup, location = location.belowbar, text = "SSL", color = color.new(sellSideSweepColor, 0), textcolor = color.white, size = size.tiny)
+plotshape(buySideSweep and sweepDisplay == "Labels", title = "SMI Buy-side Sweep Label", style = shape.triangledown, location = location.abovebar, text = "BSL", color = color.new(buySideSweepColor, 0), textcolor = color.white, size = size.tiny)
+plotshape(sellSideSweep and sweepDisplay == "Markers only", title = "SMI Sell-side Sweep Marker", style = shape.triangleup, location = location.belowbar, color = color.new(sellSideSweepColor, 0), size = size.tiny)
+plotshape(buySideSweep and sweepDisplay == "Markers only", title = "SMI Buy-side Sweep Marker", style = shape.triangledown, location = location.abovebar, color = color.new(buySideSweepColor, 0), size = size.tiny)
+
+//──────────────────────────────────────────────────────────────────────────────
+// Zone lifecycle
+//──────────────────────────────────────────────────────────────────────────────
+f_updateLiquidityLines()
+[fvgMidpointTouched, fvgInvalidated, fvgReaction] = f_updateZones(fvgZones)
+[obMidpointTouched, obInvalidated, obReaction] = f_updateZones(obZones)
+
+//──────────────────────────────────────────────────────────────────────────────
+// Primitive visibility badge. This is not a candidate score or trading decision.
+//──────────────────────────────────────────────────────────────────────────────
+var label contextLabel = na
+if confirmedBar and effectiveShowContextBadge and barstate.islast
+    string contextText = fvgReaction or obReaction ? "PINE_REACTION_OBSERVED" : bullFvgRenderable or bearFvgRenderable ? "PINE_VALID_QUALITY_ZONE_VISIBLE" : bullFvgGeometry or bearFvgGeometry ? "PINE_FVG_GEOMETRY_HIDDEN_BY_QUALITY" : not na(bullObOffset) or not na(bearObOffset) ? "PINE_OB_VISIBLE" : sellSideSweep or buySideSweep ? "PINE_SWEEP_OBSERVED" : "PINE_CONTEXT_ONLY"
+    if isDebug
+        contextText += "\nchartTF only | not entry | not trigger"
+        contextText += "\nBOS dir=" + str.tostring(lastBosDir) + " bar=" + str.tostring(lastBosBar)
+    if na(contextLabel)
+        contextLabel := label.new(x = bar_index, y = high, text = contextText, style = label.style_label_left, color = color.new(color.blue, 60), textcolor = color.white, size = size.small)
+    else
+        label.set_x(contextLabel, bar_index)
+        label.set_y(contextLabel, high)
+        label.set_text(contextLabel, contextText)
+
+//──────────────────────────────────────────────────────────────────────────────
+// Tiny legend. Visual guide only: not entry, not trigger, not risk.
+// Default is hidden. Enable from Settings -> Legend -> Show legend.
+//──────────────────────────────────────────────────────────────────────────────
+var table smiLegend = table.new(f_legendPosition(), 2, 5, border_width = 0)
+
+f_legendRow(int row, string objectText, string meaningText, color swatchColor) =>
+    table.cell(smiLegend, 0, row, objectText, bgcolor = swatchColor, text_color = color.white, text_size = f_legendTextSize())
+    table.cell(smiLegend, 1, row, meaningText, bgcolor = color.new(color.black, 12), text_color = color.white, text_size = f_legendTextSize())
+
+f_clearLegend() =>
+    table.clear(smiLegend, 0, 0, 1, 4)
+
+if barstate.islast
+    f_clearLegend()
+    if showLegend
+        if legendMode == "Tiny"
+            f_legendRow(0, "FVG", "green/red imbalance", color.new(color.blue, 45))
+            f_legendRow(1, "OB", "cyan/magenta block", color.new(color.purple, 35))
+            f_legendRow(2, "SSL/BSL", "▲/▼ sweep", color.new(color.gray, 35))
+        else
+            f_legendRow(0, "B-FVG / S-FVG", "valid imbalance zones", color.new(color.blue, 40))
+            f_legendRow(1, "B-OB / S-OB", "order-block zones", color.new(color.purple, 30))
+            f_legendRow(2, "SSL / BSL", "liquidity sweeps", color.new(color.gray, 35))
+            f_legendRow(3, "CE", "midpoint only", color.new(color.gray, 50))
+            f_legendRow(4, "Visible", "valid + quality", color.new(color.black, 0))
+
+//──────────────────────────────────────────────────────────────────────────────
+// Context alerts. These are visual/context alerts only, not entries/triggers.
+//──────────────────────────────────────────────────────────────────────────────
+alertcondition(bullFvgGeometry, "SMI Bullish FVG geometry detected", "SMI Bullish FVG geometry detected on current chart timeframe. Context only, not entry, not trigger.")
+alertcondition(bearFvgGeometry, "SMI Bearish FVG geometry detected", "SMI Bearish FVG geometry detected on current chart timeframe. Context only, not entry, not trigger.")
+alertcondition(bullFvgStrong, "SMI Strong Bullish FVG", "SMI Strong Bullish FVG primitive quality on current chart timeframe. Context only, not entry, not trigger.")
+alertcondition(bearFvgStrong, "SMI Strong Bearish FVG", "SMI Strong Bearish FVG primitive quality on current chart timeframe. Context only, not entry, not trigger.")
+alertcondition(sellSideSweep, "SMI Sell-side Sweep", "SMI Sell-side Sweep on current chart timeframe. Context only, not entry, not trigger.")
+alertcondition(buySideSweep, "SMI Buy-side Sweep", "SMI Buy-side Sweep on current chart timeframe. Context only, not entry, not trigger.")
+alertcondition(fvgMidpointTouched, "SMI FVG midpoint touched", "SMI FVG midpoint touched on current chart timeframe. Mitigation context only, not invalidation by itself.")
+alertcondition(obMidpointTouched, "SMI OB midpoint touched", "SMI Order Block midpoint touched on current chart timeframe. Mitigation context only, not invalidation by itself.")
+alertcondition(fvgReaction or obReaction, "SMI Reaction observed", "SMI Reaction observed on current chart timeframe. Context only, not entry, not trigger.")
+alertcondition(fvgInvalidated or obInvalidated, "SMI Zone invalidated", "SMI Zone invalidated on current chart timeframe by close beyond zone edge.")

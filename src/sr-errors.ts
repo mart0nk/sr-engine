@@ -25,7 +25,8 @@ export type SrErrorCode =
   | 'SR_INVALID_TIMEFRAME'
   | 'SR_CALCULATION_FAILED'
   | 'SR_INVALID_SYMBOL'
-  | 'SR_UNSUPPORTED_ZONE_POLICY';
+  | 'SR_UNSUPPORTED_ZONE_POLICY'
+  | 'SR_INPUT_VALIDATION_FAILED';
 
 export const SrErrors = {
   insufficientCandles(details?: unknown): SrError {
@@ -76,6 +77,15 @@ export const SrErrors = {
       statusCode: 400,
       code: 'SR_UNSUPPORTED_ZONE_POLICY',
       message: `Unsupported zone construction policy: ${policy}`,
+    });
+  },
+
+  inputValidationFailed(details?: unknown): SrError {
+    return new SrError({
+      statusCode: 422,
+      code: 'SR_INPUT_VALIDATION_FAILED',
+      message: 'Support/resistance input validation failed',
+      ...(details !== undefined ? { details } : {}),
     });
   },
 } as const;

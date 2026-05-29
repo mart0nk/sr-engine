@@ -1,8 +1,4 @@
-export type ZoneConstructionPolicy =
-  | 'WICK_TO_BODY'
-  | 'FULL_CANDLE'
-  | 'BODY_TO_BODY'
-  | 'ATR_AROUND_PIVOT';
+export type ZoneConstructionPolicy = 'WICK_TO_BODY';
 
 export type SupportResistanceConfig = {
   pivotLeftBars: number;

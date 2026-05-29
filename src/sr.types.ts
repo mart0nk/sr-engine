@@ -490,6 +490,14 @@ export type TwoRPathContext = {
   warnings: SupportResistanceWarning[];
 };
 
+export type SupportResistanceReadinessReasons = {
+  engine: string[];
+  structure: string[];
+  actionable: string[];
+  range: string[];
+  location: string[];
+};
+
 export type SupportResistanceSnapshot = {
   symbol: string;
   timeframe: Timeframe;
@@ -564,6 +572,13 @@ export type SupportResistanceSnapshot = {
   };
 
   ready: boolean;
+  legacyReady: boolean;
+  engineReady: boolean;
+  structureReady: boolean;
+  actionableStructureReady: boolean;
+  boundedRangeReady: boolean;
+  locationContextUsable: boolean;
+  readinessReasons: SupportResistanceReadinessReasons;
   notReadyReason?: SupportResistanceNotReadyReason;
   missing: SupportResistanceMissing[];
   warnings: SupportResistanceWarning[];

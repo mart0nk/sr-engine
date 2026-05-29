@@ -6,6 +6,8 @@ Deterministic support/resistance engine for OHLCV candle streams.
 
 The package is intentionally data-source agnostic. It does not fetch candles, live prices, ATR, tick size, instrument metadata, or exchange data. Callers provide those inputs and receive a pure `SupportResistanceSnapshot`.
 
+`SupportResistanceEngine` remains the permissive library-mode entrypoint. For production/backtest integrations that require stricter guarantees around candle ordering, closed-bar structure inputs, ATR, tick size, and timeframe continuity, use `StrictSupportResistanceEngine` or `validateSupportResistanceInput(...)`.
+
 ## Install
 
 ```bash
@@ -17,6 +19,7 @@ npm install sr-engine
 ```ts
 import {
   SupportResistanceEngine,
+  StrictSupportResistanceEngine,
   type Candle,
   type SupportResistanceSnapshot,
 } from "sr-engine";
@@ -55,6 +58,18 @@ console.log(
   snapshot.r1?.mid,
   snapshot.structureState.rangeLocation,
 );
+
+const strictEngine = new StrictSupportResistanceEngine();
+strictEngine.evaluate({
+  symbol: "BTCUSDT",
+  timeframe: "15m",
+  candles,
+  currentPrice: 42100,
+  priceSource: "MARKET_SNAPSHOT",
+  timestamp: new Date(),
+  atr: 180,
+  tickSize: 0.1,
+});
 ```
 
 ## Input Contract
@@ -74,6 +89,12 @@ type SupportResistanceInput = {
 ```
 
 The engine expects candles to be sorted oldest to newest. It can run without `atr` and `tickSize`, but some quality, width, freshness, and diagnostics signals become weaker and the snapshot will include missing/warning metadata.
+
+Contract boundary:
+
+- `candles` are the closed structure candles used for pivots, lifecycle, quality, and evidence.
+- `currentPrice` is a separate location input and may come from a live market snapshot or the last closed candle.
+- In-progress candles must not participate in structure logic. If you need that guarantee enforced, use the strict validator/strict engine path.
 
 Supported timeframes:
 
@@ -100,6 +121,18 @@ Snapshots can be not-ready. In that case `ready` is `false` and `notReadyReason`
 - `INSUFFICIENT_CANDLES`
 - `NO_VALID_PIVOTS`
 - `NO_PUBLIC_ACTIVE_ZONES`
+
+`ready` is the legacy broad readiness flag. Newer consumers should prefer the additive readiness fields on `SupportResistanceSnapshot`:
+
+- `legacyReady`
+- `engineReady`
+- `structureReady`
+- `actionableStructureReady`
+- `boundedRangeReady`
+- `locationContextUsable`
+- `readinessReasons`
+
+These fields describe market-structure usability only. They are not trade signals and do not imply buy/sell permission.
 
 ## Zone Model
 
@@ -160,6 +193,54 @@ const snapshot = engine.evaluate({
 });
 ```
 
+Stable zone construction policy:
+
+- The stable public `ZoneConstructionPolicy` is `WICK_TO_BODY`.
+- Historical unsupported policy strings are no longer part of the stable public API contract.
+
+## Strict Validation
+
+Use the strict validation boundary when the caller needs fail-fast guarantees before running the core engine:
+
+```ts
+import {
+  StrictSupportResistanceEngine,
+  validateSupportResistanceInput,
+} from "sr-engine";
+
+validateSupportResistanceInput({
+  symbol: "ETHUSDT",
+  timeframe: "1h",
+  candles,
+  currentPrice: 2500,
+  priceSource: "MARKET_SNAPSHOT",
+  timestamp: new Date(),
+  atr: 35,
+  tickSize: 0.01,
+});
+
+const strictEngine = new StrictSupportResistanceEngine();
+const snapshot = strictEngine.evaluate({
+  symbol: "ETHUSDT",
+  timeframe: "1h",
+  candles,
+  currentPrice: 2500,
+  priceSource: "MARKET_SNAPSHOT",
+  timestamp: new Date(),
+  atr: 35,
+  tickSize: 0.01,
+});
+```
+
+The strict validator can report or reject:
+
+- empty, unsorted, duplicate, or open structure candles
+- invalid OHLC or non-finite numeric fields
+- symbol/timeframe mismatches
+- timeframe gaps depending on gap policy
+- missing or invalid ATR when required
+- missing or invalid tick size when required
+
 ## Advanced Exports
 
 The package also exports the lower-level building blocks used by the engine:
@@ -190,6 +271,18 @@ This script is intended for chart visualization and public visual review. It is 
 
 The TypeScript engine remains the source of truth.
 
+## Testing and Determinism
+
+The repo now includes:
+
+- synthetic replay/no-lookahead fixtures
+- strict-validation tests
+- ATR-sensitive lifecycle regression tests
+- compact real-market regression fixtures with provenance
+- normalized golden snapshot checkpoints
+
+Golden tests compare normalized business projections, not raw full snapshots, to keep regressions high-signal and deterministic.
+
 ## Design Constraints
 
 - ESM-only package.
@@ -199,7 +292,7 @@ The TypeScript engine remains the source of truth.
 - No trade execution logic.
 - No clean-stop or 2R-path logic.
 
-The caller owns data loading, candle validation, live price selection, ATR calculation, and instrument metadata.
+The caller owns data loading, live price selection, ATR calculation, and instrument metadata. Candle validation can remain caller-owned in permissive mode, or be enforced through the strict validation boundary.
 
 ## Development
 

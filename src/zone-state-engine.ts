@@ -43,9 +43,10 @@ export function classifyZoneLifecycle(input: {
   startIndex: number;
   breakBuffer: number;
   reclaimBuffer: number;
+  atr?: number;
   config?: Partial<SupportResistanceConfig>;
 }): ZoneLifecycleResult {
-  const { zone, candles, breakBuffer, reclaimBuffer } = input;
+  const { zone, candles, breakBuffer, reclaimBuffer, atr } = input;
   const config = resolveSupportResistanceConfig(input.config);
 
   let role: StructureZoneRole = zone.role;
@@ -84,6 +85,7 @@ export function classifyZoneLifecycle(input: {
         zone: { ...zone, role },
         candles,
         touchIndex: i,
+        ...(atr !== undefined ? { atr } : {}),
         config,
       });
       reactionQuality = quality;
