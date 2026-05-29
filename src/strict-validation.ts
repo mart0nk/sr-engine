@@ -3,14 +3,17 @@ import type { SupportResistanceInput } from './sr-engine.js';
 
 export type SrValidationIssueCode =
   | 'EMPTY_CANDLES'
+  | 'INVALID_TIMEFRAME'
   | 'UNSORTED_CANDLES'
   | 'DUPLICATE_CANDLE_TIMESTAMP'
   | 'OPEN_CANDLE_NOT_ALLOWED'
   | 'INVALID_OHLC'
+  | 'INVALID_CANDLE_DURATION'
   | 'NON_FINITE_NUMBER'
   | 'NEGATIVE_VOLUME'
   | 'TIMEFRAME_GAP'
   | 'TIMEFRAME_MISMATCH'
+  | 'SYMBOL_MISMATCH'
   | 'MISSING_ATR'
   | 'INVALID_ATR'
   | 'MISSING_TICK_SIZE'
@@ -45,6 +48,7 @@ const TIMEFRAME_MS: Record<Timeframe, number> = {
   '4h': 14_400_000,
   '1d': 86_400_000,
 };
+const VALID_TIMEFRAMES = Object.keys(TIMEFRAME_MS) as Timeframe[];
 
 const DEFAULT_VALIDATION_OPTIONS: Required<SupportResistanceValidationOptions> = {
   requireAtr: true,
@@ -71,6 +75,7 @@ export function validateSupportResistanceInput(
 ): SrValidationIssue[] {
   const resolved = resolveSupportResistanceValidationOptions(options);
   const issues: SrValidationIssue[] = [];
+  const timeframeMs = validateInputTimeframe(input.timeframe, issues);
 
   validateCurrentPrice(input.currentPrice, issues);
   validateAtr(input.atr, resolved.requireAtr, issues);
@@ -88,7 +93,7 @@ export function validateSupportResistanceInput(
     return issues;
   }
 
-  const gapIssues = validateCandles(input, resolved);
+  const gapIssues = validateCandles(input, resolved, timeframeMs);
   issues.push(...gapIssues.issues);
 
   if (
@@ -182,9 +187,9 @@ function validateTickSize(
 function validateCandles(
   input: SupportResistanceInput,
   options: Required<SupportResistanceValidationOptions>,
+  timeframeMs: number | undefined,
 ): { issues: SrValidationIssue[]; gapCount: number } {
   const issues: SrValidationIssue[] = [];
-  const timeframeMs = TIMEFRAME_MS[input.timeframe];
   let previousOpenTime: number | undefined;
   let gapCount = 0;
   let trailingOpenCandleConsumed = false;
@@ -195,13 +200,26 @@ function validateCandles(
 
     if (candle.symbol !== input.symbol) {
       issues.push({
-        code: 'TIMEFRAME_MISMATCH',
+        code: 'SYMBOL_MISMATCH',
         severity: 'ERROR',
         message: 'Candle symbol must match input symbol',
         candleIndex: index,
         field: 'symbol',
         expected: input.symbol,
         actual: candle.symbol,
+      });
+    }
+
+    const candleTimeframeValid = isValidTimeframe(candle.timeframe);
+    if (!candleTimeframeValid) {
+      issues.push({
+        code: 'INVALID_TIMEFRAME',
+        severity: 'ERROR',
+        message: 'Candle timeframe must be one of the supported timeframe literals',
+        candleIndex: index,
+        field: 'timeframe',
+        expected: VALID_TIMEFRAMES,
+        actual: candle.timeframe,
       });
     }
 
@@ -252,6 +270,21 @@ function validateCandles(
           expected: `> ${openTime}`,
           actual: closeTime,
         });
+      } else if (timeframeMs !== undefined) {
+        const expectedDuration = timeframeMs - 1;
+        const actualDuration = closeTime - openTime;
+        if (actualDuration !== expectedDuration) {
+          issues.push({
+            code: 'INVALID_CANDLE_DURATION',
+            severity: 'ERROR',
+            message:
+              'closeTime - openTime must match the inclusive candle duration for the declared timeframe',
+            candleIndex: index,
+            field: 'closeTime',
+            expected: expectedDuration,
+            actual: actualDuration,
+          });
+        }
       }
     }
 
@@ -298,7 +331,7 @@ function validateCandles(
         });
       } else {
         const delta = openTime - previousOpenTime;
-        if (delta !== timeframeMs) {
+        if (timeframeMs !== undefined && delta !== timeframeMs) {
           const gapDelta = Math.abs(delta - timeframeMs);
           if (options.maxAllowedGapMs === 0 || gapDelta > options.maxAllowedGapMs) {
             gapCount += 1;
@@ -322,6 +355,29 @@ function validateCandles(
   }
 
   return { issues, gapCount };
+}
+
+function validateInputTimeframe(
+  timeframe: SupportResistanceInput['timeframe'],
+  issues: SrValidationIssue[],
+): number | undefined {
+  if (!isValidTimeframe(timeframe)) {
+    issues.push({
+      code: 'INVALID_TIMEFRAME',
+      severity: 'ERROR',
+      message: 'timeframe must be one of the supported timeframe literals',
+      field: 'timeframe',
+      expected: VALID_TIMEFRAMES,
+      actual: timeframe,
+    });
+    return undefined;
+  }
+
+  return TIMEFRAME_MS[timeframe];
+}
+
+function isValidTimeframe(value: unknown): value is Timeframe {
+  return typeof value === 'string' && VALID_TIMEFRAMES.includes(value as Timeframe);
 }
 
 function validateCandleNumbers(

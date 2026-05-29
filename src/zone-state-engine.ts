@@ -1,5 +1,5 @@
 import type { Candle } from './primitives.js';
-import type { ReactionQuality, StructureZone, StructureZoneRole, ZoneLifecycle, StructureWarning, ZoneTouchAccountingV2 } from './sr.types.js';
+import type { ReactionQuality, ReactionStrength, StructureZone, StructureZoneRole, ZoneLifecycle, StructureWarning, ZoneTouchAccountingV2 } from './sr.types.js';
 import type { SupportResistanceConfig } from './sr-config.js';
 import { resolveSupportResistanceConfig } from './sr-config.js';
 import { evaluateReactionQuality } from './zone-reaction-quality.js';
@@ -77,6 +77,7 @@ export function classifyZoneLifecycle(input: {
     if (candle === undefined) continue;
     const previousCandle = candles[i - 1];
     const touched = intersectsZone(candle, zone);
+    let qualifiedReactionRejection = false;
 
     if (touched && !wasInsideZone) {
       touchCount += 1;
@@ -89,7 +90,11 @@ export function classifyZoneLifecycle(input: {
         config,
       });
       reactionQuality = quality;
-      if (quality.closedAwayFromZone && quality.reactionStrength !== 'NONE') {
+      qualifiedReactionRejection =
+        quality.closedAwayFromZone &&
+        meetsReactionThreshold(quality.reactionStrength, config.trueTestMinReactionStrength);
+
+      if (qualifiedReactionRejection) {
         cleanTouchSessions += 1;
         lastRespectedAt = candle.openTime;
         lastRespectedIndex = i;
@@ -126,7 +131,7 @@ export function classifyZoneLifecycle(input: {
           breakCount += 1;
           brokenAt = candle.openTime;
           evidence.push(`BROKEN_DOWN_AT_${candle.openTime.toISOString()}`);
-        } else if (interaction === 'REJECTION') {
+        } else if (interaction === 'REJECTION' && qualifiedReactionRejection) {
           lifecycle = 'TESTED';
           rejectionCount += 1;
           lastTouchedAt = candle.openTime;
@@ -175,7 +180,7 @@ export function classifyZoneLifecycle(input: {
           lifecycle = 'INVALIDATED';
           invalidatedAt = candle.openTime;
           evidence.push(`INVALIDATED_FLIPPED_LOST_AT_${candle.openTime.toISOString()}`);
-        } else if (interaction === 'REJECTION') {
+        } else if (interaction === 'REJECTION' && qualifiedReactionRejection) {
           rejectionCount += 1;
           lastTouchedAt = candle.openTime;
           lastRespectedAt = candle.openTime;
@@ -268,6 +273,14 @@ function isPassThroughTouch(input: {
 
 export function intersectsZone(candle: Candle, zone: StructureZone): boolean {
   return candle.low <= zone.high && candle.high >= zone.low;
+}
+
+function meetsReactionThreshold(
+  strength: ReactionStrength,
+  minStrength: 'WEAK' | 'NORMAL' | 'STRONG',
+): boolean {
+  const order: ReactionStrength[] = ['NONE', 'WEAK', 'NORMAL', 'STRONG'];
+  return order.indexOf(strength) >= order.indexOf(minStrength);
 }
 
 function classifyInteraction(input: {

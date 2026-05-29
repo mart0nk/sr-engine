@@ -19,7 +19,7 @@ function makeResistanceZone(overrides: Partial<StructureZone> = {}): StructureZo
 }
 
 describe('zone lifecycle ATR propagation and synthetic truth cases', () => {
-  it('uses ATR to change lifecycle credit and downstream quality for the same touch', () => {
+  it('uses ATR to gate TESTED promotion and downstream quality for the same touch', () => {
     const zone = makeSupportZone({
       low: 99,
       high: 100.5,
@@ -42,7 +42,7 @@ describe('zone lifecycle ATR propagation and synthetic truth cases', () => {
       breakBuffer: 0.05,
       reclaimBuffer: 0.05,
       atr: 0.5,
-      config: makeLenientConfig(),
+      config: makeLenientConfig({ trueTestMinReactionStrength: 'WEAK' }),
     });
     const highAtrLifecycle = classifyZoneLifecycle({
       zone,
@@ -51,11 +51,11 @@ describe('zone lifecycle ATR propagation and synthetic truth cases', () => {
       breakBuffer: 0.05,
       reclaimBuffer: 0.05,
       atr: 10,
-      config: makeLenientConfig(),
+      config: makeLenientConfig({ trueTestMinReactionStrength: 'WEAK' }),
     });
 
     expect(lowAtrLifecycle.lifecycle).toBe('TESTED');
-    expect(highAtrLifecycle.lifecycle).toBe('TESTED');
+    expect(highAtrLifecycle.lifecycle).toBe('FRESH');
     expect(lowAtrLifecycle.cleanTouchSessions).toBe(1);
     expect(highAtrLifecycle.cleanTouchSessions).toBe(0);
     expect(lowAtrLifecycle.reactionQuality?.reactionStrength).not.toBe(
@@ -67,14 +67,14 @@ describe('zone lifecycle ATR propagation and synthetic truth cases', () => {
       candles,
       currentPrice: 101.2,
       atr: 0.5,
-      config: makeLenientConfig(),
+      config: makeLenientConfig({ trueTestMinReactionStrength: 'WEAK' }),
     });
     const highAtrQuality = evaluateZoneQuality({
       zone: mergeLifecycleIntoZone(zone, highAtrLifecycle),
       candles,
       currentPrice: 101.2,
       atr: 10,
-      config: makeLenientConfig(),
+      config: makeLenientConfig({ trueTestMinReactionStrength: 'WEAK' }),
     });
 
     expect(lowAtrQuality.score).toBeGreaterThan(highAtrQuality.score);

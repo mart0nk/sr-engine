@@ -232,11 +232,13 @@ const snapshot = strictEngine.evaluate({
 });
 ```
 
-The strict validator can report or reject:
+`validateSupportResistanceInput(...)` reports issues. `StrictSupportResistanceEngine` rejects `ERROR` issues before delegating to the permissive core engine.
+
+The strict validation surface covers:
 
 - empty, unsorted, duplicate, or open structure candles
 - invalid OHLC or non-finite numeric fields
-- symbol/timeframe mismatches
+- invalid timeframe literals, symbol/timeframe mismatches, and invalid candle durations
 - timeframe gaps depending on gap policy
 - missing or invalid ATR when required
 - missing or invalid tick size when required

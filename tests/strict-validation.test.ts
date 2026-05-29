@@ -41,6 +41,46 @@ describe('strict validation', () => {
     );
   });
 
+  it('rejects invalid timeframe values and candle durations at runtime', () => {
+    const invalidDuration = makeCandle('2026-01-01T00:00:00.000Z', {
+      closeTime: new Date('2026-01-01T00:30:00.000Z'),
+    });
+
+    const invalidTimeframeIssues = validateSupportResistanceInput(
+      {
+        symbol: 'BTCUSDT',
+        timeframe: 'bogus' as never,
+        candles: [makeCandle('2026-01-01T00:00:00.000Z')],
+        currentPrice: 100,
+        priceSource: 'MARKET_SNAPSHOT',
+        timestamp: new Date('2026-01-01T00:30:00.000Z'),
+        atr: 5,
+        tickSize: 0.1,
+      },
+      { gapPolicy: 'allow' },
+    );
+    expect(invalidTimeframeIssues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(['INVALID_TIMEFRAME']),
+    );
+
+    const invalidDurationIssues = validateSupportResistanceInput(
+      {
+        symbol: 'BTCUSDT',
+        timeframe: '1h',
+        candles: [invalidDuration],
+        currentPrice: 100,
+        priceSource: 'MARKET_SNAPSHOT',
+        timestamp: new Date('2026-01-01T00:30:00.000Z'),
+        atr: 5,
+        tickSize: 0.1,
+      },
+      { gapPolicy: 'allow' },
+    );
+    expect(invalidDurationIssues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(['INVALID_CANDLE_DURATION']),
+    );
+  });
+
   it('rejects timeframe gaps in reject mode and downgrades them to warnings in warn mode', () => {
     const first = makeCandle('2026-01-01T00:00:00.000Z');
     const gap = makeCandle('2026-01-01T03:00:00.000Z');
@@ -83,7 +123,7 @@ describe('strict validation', () => {
   it('allows a latest open candle only when configured and strips it before core evaluation', () => {
     const closed = makeCandle('2026-01-01T00:00:00.000Z');
     const openTail = makeCandle('2026-01-01T01:00:00.000Z', {
-      closeTime: new Date('2026-01-01T01:59:59.000Z'),
+      closeTime: new Date('2026-01-01T01:59:59.999Z'),
       closed: false,
     });
     const engine = new StrictSupportResistanceEngine({

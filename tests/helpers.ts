@@ -102,36 +102,94 @@ export function assertReplayCursorInvariants(
   candles: readonly Candle[],
 ): void {
   const cursorTimestamp = candles[cursor]?.openTime.getTime();
-  const zones = [
+  const zones = dedupeZones([
     ...snapshot.supportZones,
     ...snapshot.resistanceZones,
+    ...(snapshot.contextZones ?? []),
     ...(snapshot.transitionZones ?? []),
     ...(snapshot.brokenZonesWaitingForRetest ?? []),
-  ];
+    ...(snapshot.closestSupport ? [snapshot.closestSupport] : []),
+    ...(snapshot.closestResistance ? [snapshot.closestResistance] : []),
+    ...(snapshot.s1 ? [snapshot.s1] : []),
+    ...(snapshot.s2 ? [snapshot.s2] : []),
+    ...(snapshot.r1 ? [snapshot.r1] : []),
+    ...(snapshot.r2 ? [snapshot.r2] : []),
+    ...(snapshot.conflictResolvedZones ?? []).map((resolved) => resolved.zone),
+  ]);
 
   for (const zone of zones) {
-    if (zone.originIndex > cursor) {
-      throw new Error(`Zone ${zone.id} leaked future originIndex ${zone.originIndex} at cursor ${cursor}`);
-    }
-    if (zone.confirmedIndex > cursor) {
-      throw new Error(`Zone ${zone.id} leaked future confirmedIndex ${zone.confirmedIndex} at cursor ${cursor}`);
-    }
-    if (zone.availableFromIndex > cursor) {
-      throw new Error(`Zone ${zone.id} leaked future availableFromIndex ${zone.availableFromIndex} at cursor ${cursor}`);
-    }
-    if ((zone.lastRespectedIndex ?? -1) > cursor) {
-      throw new Error(`Zone ${zone.id} leaked future lastRespectedIndex ${zone.lastRespectedIndex} at cursor ${cursor}`);
-    }
-    if ((zone.touchAccounting?.lastMitigatedIndex ?? -1) > cursor) {
-      throw new Error(`Zone ${zone.id} leaked future lastMitigatedIndex ${zone.touchAccounting?.lastMitigatedIndex} at cursor ${cursor}`);
-    }
-    if ((zone.touchAccounting?.lastTrueTestIndex ?? -1) > cursor) {
-      throw new Error(`Zone ${zone.id} leaked future lastTrueTestIndex ${zone.touchAccounting?.lastTrueTestIndex} at cursor ${cursor}`);
-    }
-    if (cursorTimestamp !== undefined) {
-      for (const eventTime of [zone.brokenAt, zone.flippedAt, zone.invalidatedAt]) {
-        if (eventTime !== undefined && eventTime.getTime() > cursorTimestamp) {
-          throw new Error(`Zone ${zone.id} leaked future lifecycle timestamp ${eventTime.toISOString()} at cursor ${cursor}`);
+    if ('originIndex' in zone) {
+      assertIndexAtOrBeforeCursor(zone.originIndex, cursor, zone.id, 'originIndex');
+      assertIndexAtOrBeforeCursor(zone.confirmedIndex, cursor, zone.id, 'confirmedIndex');
+      assertIndexAtOrBeforeCursor(zone.availableFromIndex, cursor, zone.id, 'availableFromIndex');
+      assertOptionalIndexAtOrBeforeCursor(zone.lastRespectedIndex, cursor, zone.id, 'lastRespectedIndex');
+      assertOptionalIndexAtOrBeforeCursor(
+        zone.touchAccounting?.lastMitigatedIndex,
+        cursor,
+        zone.id,
+        'touchAccounting.lastMitigatedIndex',
+      );
+      assertOptionalIndexAtOrBeforeCursor(
+        zone.touchAccounting?.lastTrueTestIndex,
+        cursor,
+        zone.id,
+        'touchAccounting.lastTrueTestIndex',
+      );
+      assertOptionalIndexAtOrBeforeCursor(
+        zone.structuredEvidence?.lastRespectedIndex,
+        cursor,
+        zone.id,
+        'structuredEvidence.lastRespectedIndex',
+      );
+
+      if (cursorTimestamp !== undefined) {
+        for (const [field, date] of [
+          ['originAt', zone.originAt],
+          ['createdAt', zone.createdAt],
+          ['lastTouchedAt', zone.lastTouchedAt],
+          ['lastRespectedAt', zone.lastRespectedAt],
+          ['brokenAt', zone.brokenAt],
+          ['flippedAt', zone.flippedAt],
+          ['invalidatedAt', zone.invalidatedAt],
+          ['touchAccounting.lastMitigatedAt', zone.touchAccounting?.lastMitigatedAt],
+          ['touchAccounting.lastTrueTestAt', zone.touchAccounting?.lastTrueTestAt],
+          ['structuredEvidence.lastRespectedAt', zone.structuredEvidence?.lastRespectedAt],
+        ] as const) {
+          assertOptionalTimeAtOrBeforeCursor(date, cursorTimestamp, zone.id, field);
+        }
+
+        for (const component of zone.clusterComponents ?? []) {
+          assertOptionalTimeAtOrBeforeCursor(
+            component.originAt,
+            cursorTimestamp,
+            zone.id,
+            'clusterComponents.originAt',
+          );
+        }
+
+        const detectedPivot = zone.formationTrace?.detectedPivot;
+        if (detectedPivot !== undefined) {
+          assertIndexAtOrBeforeCursor(
+            detectedPivot.originIndex,
+            cursor,
+            zone.id,
+            'formationTrace.detectedPivot.originIndex',
+          );
+          assertOptionalTimeAtOrBeforeCursor(
+            detectedPivot.originAt,
+            cursorTimestamp,
+            zone.id,
+            'formationTrace.detectedPivot.originAt',
+          );
+        }
+
+        for (const event of zone.formationTrace?.lifecycleEvents ?? []) {
+          assertOptionalTimeAtOrBeforeCursor(
+            event.at,
+            cursorTimestamp,
+            zone.id,
+            'formationTrace.lifecycleEvents.at',
+          );
         }
       }
     }
@@ -199,4 +257,45 @@ function normalizeReadinessReasons(snapshot: SupportResistanceSnapshot['readines
 
 function round(value: number): number {
   return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function dedupeZones<T extends { id: string }>(zones: T[]): T[] {
+  const byId = new Map<string, T>();
+  for (const zone of zones) {
+    byId.set(zone.id, zone);
+  }
+  return [...byId.values()];
+}
+
+function assertIndexAtOrBeforeCursor(
+  value: number,
+  cursor: number,
+  zoneId: string,
+  field: string,
+): void {
+  if (value > cursor) {
+    throw new Error(`Zone ${zoneId} leaked future ${field} ${value} at cursor ${cursor}`);
+  }
+}
+
+function assertOptionalIndexAtOrBeforeCursor(
+  value: number | undefined,
+  cursor: number,
+  zoneId: string,
+  field: string,
+): void {
+  if (value !== undefined) {
+    assertIndexAtOrBeforeCursor(value, cursor, zoneId, field);
+  }
+}
+
+function assertOptionalTimeAtOrBeforeCursor(
+  value: Date | undefined,
+  cursorTimestamp: number,
+  zoneId: string,
+  field: string,
+): void {
+  if (value !== undefined && value.getTime() > cursorTimestamp) {
+    throw new Error(`Zone ${zoneId} leaked future ${field} ${value.toISOString()} beyond cursor timestamp`);
+  }
 }

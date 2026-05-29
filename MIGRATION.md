@@ -19,6 +19,7 @@ Previous behavior:
 Current behavior:
 
 - when `atr` is provided, lifecycle reaction checks use ATR-aware thresholds
+- `FRESH -> TESTED` now requires a reaction that meets `trueTestMinReactionStrength`, instead of promoting any geometric rejection
 - this can change:
   - clean-vs-weak reaction interpretation
   - lifecycle credit
@@ -40,9 +41,12 @@ Use these when you want fail-fast guarantees for:
 - duplicate timestamp rejection
 - closed structure candles
 - valid OHLC invariants
+- valid timeframe literals and inclusive candle duration
 - finite numeric fields
 - gap policy enforcement
 - required ATR/tick size
+
+`validateSupportResistanceInput(...)` reports issues. `StrictSupportResistanceEngine` throws on `ERROR` issues and then evaluates the sanitized closed-candle structure series.
 
 The base `SupportResistanceEngine` remains permissive for library-style usage.
 
