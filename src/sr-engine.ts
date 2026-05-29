@@ -13,6 +13,7 @@ import type {
   FreshnessState,
   ZoneTier,
   SupportResistanceDiagnostics,
+  SupportResistanceReadinessReasons,
   SrBottleneck,
   SupportResistanceAvailability,
   SupportResistanceConflict,
@@ -155,9 +156,12 @@ export class SupportResistanceEngine {
       ...(tickSize !== undefined ? { tickSize } : {}),
       config
     });
+    const availableZones = clustered.filter(
+      (zone) => zone.availableFromIndex <= candles.length - 1
+    );
 
     // Pass 1: lifecycle classification
-    const lifecycleZones = clustered.map((zone) => {
+    const lifecycleZones = availableZones.map((zone) => {
       const breakBuffer = computeBuffer(
         zone.mid,
         tickSize,
@@ -176,6 +180,7 @@ export class SupportResistanceEngine {
         startIndex: zone.availableFromIndex,
         breakBuffer,
         reclaimBuffer,
+        ...(atr !== undefined ? { atr } : {}),
         config
       });
 
@@ -525,6 +530,80 @@ export class SupportResistanceEngine {
       ...(rangeLocation !== undefined ? { rangeLocation } : {}),
       warnings: [...new Set(warnings)] as StructureWarning[]
     });
+    const readinessState = buildReadinessState({
+      legacyReady: ready,
+      engineReady: candles.length >= config.minCandlesForReady && hasPrice,
+      structureReady:
+        publicActiveZones.length > 0 ||
+        contextZones.length > 0 ||
+        transitionZones.length > 0,
+      actionableStructureReady: s1r1EligibleZones.length > 0,
+      boundedRangeReady:
+        s1 !== undefined &&
+        r1 !== undefined &&
+        srConflictResult.type === 'NONE',
+      locationContextUsable:
+        s1 !== undefined &&
+        r1 !== undefined &&
+        srConflictResult.type === 'NONE' &&
+        !insideContextZone &&
+        rangeLocation !== 'MIDDLE' &&
+        rangeLocation !== 'COMPRESSED_OR_OVERLAPPING_RANGE' &&
+        !warnings.includes('NO_CLEAN_TRADE_LOCATION'),
+      reasons: {
+        ...(candles.length < config.minCandlesForReady
+          ? { engine: ['INSUFFICIENT_CANDLES'] }
+          : {}),
+        ...(hasPrice ? {} : { engine: ['MISSING_CURRENT_PRICE'] }),
+        ...((publicActiveZones.length > 0 || contextZones.length > 0 || transitionZones.length > 0)
+          ? {}
+          : { structure: ['NO_VALID_PIVOTS'] }),
+        ...(s1r1EligibleZones.length > 0
+          ? {}
+          : {
+              actionable: [
+                publicActiveZones.length === 0
+                  ? 'NO_PUBLIC_ACTIVE_ZONES'
+                  : 'NO_ACTIONABLE_SR_ZONES',
+              ],
+            }),
+        ...(s1 !== undefined && r1 !== undefined && srConflictResult.type === 'NONE'
+          ? {}
+          : {
+              range: [
+                srConflictResult.type !== 'NONE'
+                  ? srConflictResult.type
+                  : 'MISSING_RANGE_BOUNDARY',
+              ],
+            }),
+        ...((s1 !== undefined &&
+          r1 !== undefined &&
+          srConflictResult.type === 'NONE' &&
+          !insideContextZone &&
+          rangeLocation !== 'MIDDLE' &&
+          rangeLocation !== 'COMPRESSED_OR_OVERLAPPING_RANGE' &&
+          !warnings.includes('NO_CLEAN_TRADE_LOCATION'))
+          ? {}
+          : {
+              location: [
+                s1 === undefined || r1 === undefined
+                  ? 'MISSING_RANGE_BOUNDARY'
+                  : srConflictResult.type !== 'NONE'
+                    ? srConflictResult.type
+                    :
+                insideContextZone
+                  ? 'PRICE_INSIDE_CONTEXT_ZONE'
+                  : rangeLocation === 'MIDDLE'
+                    ? 'PRICE_IN_MIDDLE_OF_RANGE'
+                    : rangeLocation === 'COMPRESSED_OR_OVERLAPPING_RANGE'
+                      ? 'NO_CLEAN_RANGE'
+                      : warnings.includes('NO_CLEAN_TRADE_LOCATION')
+                        ? 'NO_CLEAN_TRADE_LOCATION'
+                        : 'NO_ACTIONABLE_SR_ZONES',
+              ],
+            }),
+      },
+    });
 
     const snapshotResult: SupportResistanceSnapshot = {
       symbol,
@@ -538,6 +617,13 @@ export class SupportResistanceEngine {
       brokenZonesWaitingForRetest,
       structureState,
       ready,
+      legacyReady: readinessState.legacyReady,
+      engineReady: readinessState.engineReady,
+      structureReady: readinessState.structureReady,
+      actionableStructureReady: readinessState.actionableStructureReady,
+      boundedRangeReady: readinessState.boundedRangeReady,
+      locationContextUsable: readinessState.locationContextUsable,
+      readinessReasons: readinessState.readinessReasons,
       ...(notReadyReason !== undefined ? { notReadyReason } : {}),
       missing: [...new Set(missing)],
       warnings: [...new Set(warnings)] as StructureWarning[],
@@ -806,6 +892,17 @@ function buildNotReadySnapshot(input: {
     transitionZoneCount: 0,
     warnings: input.warnings
   });
+  const readinessState = buildReadinessState({
+    legacyReady: false,
+    engineReady:
+      input.notReadyReason === 'NO_VALID_PIVOTS' ||
+      input.notReadyReason === 'NO_PUBLIC_ACTIVE_ZONES',
+    structureReady: false,
+    actionableStructureReady: false,
+    boundedRangeReady: false,
+    locationContextUsable: false,
+    reasons: resolveEarlyReadinessReasons(input.notReadyReason),
+  });
   return {
     symbol: input.symbol,
     timeframe: input.timeframe,
@@ -821,6 +918,13 @@ function buildNotReadySnapshot(input: {
       rangeLocation: 'UNDEFINED'
     },
     ready: false,
+    legacyReady: readinessState.legacyReady,
+    engineReady: readinessState.engineReady,
+    structureReady: readinessState.structureReady,
+    actionableStructureReady: readinessState.actionableStructureReady,
+    boundedRangeReady: readinessState.boundedRangeReady,
+    locationContextUsable: readinessState.locationContextUsable,
+    readinessReasons: readinessState.readinessReasons,
     notReadyReason: input.notReadyReason,
     missing: input.missing,
     warnings: input.warnings,
@@ -832,3 +936,76 @@ function buildNotReadySnapshot(input: {
 
 // Re-export SrErrors for callers that need to throw structured errors
 export { SrErrors };
+
+function buildReadinessState(input: {
+  legacyReady: boolean;
+  engineReady: boolean;
+  structureReady: boolean;
+  actionableStructureReady: boolean;
+  boundedRangeReady: boolean;
+  locationContextUsable: boolean;
+  reasons?: Partial<SupportResistanceReadinessReasons>;
+}): {
+  legacyReady: boolean;
+  engineReady: boolean;
+  structureReady: boolean;
+  actionableStructureReady: boolean;
+  boundedRangeReady: boolean;
+  locationContextUsable: boolean;
+  readinessReasons: SupportResistanceReadinessReasons;
+} {
+  return {
+    legacyReady: input.legacyReady,
+    engineReady: input.engineReady,
+    structureReady: input.structureReady,
+    actionableStructureReady: input.actionableStructureReady,
+    boundedRangeReady: input.boundedRangeReady,
+    locationContextUsable: input.locationContextUsable,
+    readinessReasons: {
+      engine: [...new Set(input.reasons?.engine ?? [])],
+      structure: [...new Set(input.reasons?.structure ?? [])],
+      actionable: [...new Set(input.reasons?.actionable ?? [])],
+      range: [...new Set(input.reasons?.range ?? [])],
+      location: [...new Set(input.reasons?.location ?? [])],
+    },
+  };
+}
+
+function resolveEarlyReadinessReasons(
+  notReadyReason: StructureNotReadyReason,
+): SupportResistanceReadinessReasons {
+  switch (notReadyReason) {
+    case 'MISSING_CURRENT_PRICE':
+      return {
+        engine: ['MISSING_CURRENT_PRICE'],
+        structure: ['MISSING_CURRENT_PRICE'],
+        actionable: ['MISSING_CURRENT_PRICE'],
+        range: ['MISSING_CURRENT_PRICE'],
+        location: ['MISSING_CURRENT_PRICE'],
+      };
+    case 'INSUFFICIENT_CANDLES':
+      return {
+        engine: ['INSUFFICIENT_CANDLES'],
+        structure: ['INSUFFICIENT_CANDLES'],
+        actionable: ['INSUFFICIENT_CANDLES'],
+        range: ['INSUFFICIENT_CANDLES'],
+        location: ['INSUFFICIENT_CANDLES'],
+      };
+    case 'NO_VALID_PIVOTS':
+      return {
+        engine: [],
+        structure: ['NO_VALID_PIVOTS'],
+        actionable: ['NO_VALID_PIVOTS'],
+        range: ['NO_VALID_PIVOTS'],
+        location: ['NO_VALID_PIVOTS'],
+      };
+    case 'NO_PUBLIC_ACTIVE_ZONES':
+      return {
+        engine: [],
+        structure: ['NO_PUBLIC_ACTIVE_ZONES'],
+        actionable: ['NO_PUBLIC_ACTIVE_ZONES'],
+        range: ['NO_PUBLIC_ACTIVE_ZONES'],
+        location: ['NO_PUBLIC_ACTIVE_ZONES'],
+      };
+  }
+}

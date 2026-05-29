@@ -193,6 +193,13 @@ describe('SupportResistanceEngine transition-only snapshots', () => {
 
     expect(result.ready).toBe(false);
     expect(result.notReadyReason).toBe('NO_PUBLIC_ACTIVE_ZONES');
+    expect(result.legacyReady).toBe(false);
+    expect(result.engineReady).toBe(true);
+    expect(result.structureReady).toBe(true);
+    expect(result.actionableStructureReady).toBe(false);
+    expect(result.boundedRangeReady).toBe(false);
+    expect(result.locationContextUsable).toBe(false);
+    expect(result.readinessReasons.actionable).toContain('NO_PUBLIC_ACTIVE_ZONES');
     expect(result.supportZones).toEqual([]);
     expect(result.resistanceZones).toEqual([]);
     expect(result.transitionZones).toHaveLength(1);

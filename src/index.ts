@@ -1,6 +1,11 @@
 // Engine
 export { SupportResistanceEngine, SrErrors, zonesOverlap, getMinCleanRangeGap, classifyS1R1Conflict } from './sr-engine.js';
 export type { SupportResistanceInput } from './sr-engine.js';
+export { StrictSupportResistanceEngine } from './strict-engine.js';
+export {
+  resolveSupportResistanceValidationOptions,
+  validateSupportResistanceInput,
+} from './strict-validation.js';
 
 // Config
 export {
@@ -10,6 +15,11 @@ export {
   resolveStructureConfig,
 } from './sr-config.js';
 export type { SupportResistanceConfig, StructureConfig, ZoneConstructionPolicy } from './sr-config.js';
+export type {
+  SupportResistanceValidationOptions,
+  SrValidationIssue,
+  SrValidationIssueCode,
+} from './strict-validation.js';
 
 // Types
 export type {
@@ -22,6 +32,7 @@ export type {
   SupportResistanceConflict,
   SupportResistanceSnapshot,
   SupportResistanceNotReadyReason,
+  SupportResistanceReadinessReasons,
   // Backward-compat aliases
   StructureZone,
   StructureWarning,
