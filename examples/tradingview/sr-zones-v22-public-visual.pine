@@ -1,4 +1,5 @@
 //@version=6
+// SPDX-License-Identifier: MIT
 indicator("Smart Money Indicator v1.5 - Tiny Legend Controls", overlay = true, max_boxes_count = 300, max_lines_count = 300, max_labels_count = 300)
 
 //SMI Pine v1.5 is a standalone current-chart-timeframe overlay with valid-quality visibility, tiny/optional legend, and separate visual toggles.

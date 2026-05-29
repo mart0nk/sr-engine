@@ -74,6 +74,8 @@ export type {
   TwoRPathBlocker,
   TwoRPathContext,
   StopQuality,
+  RangeBoundaryRole,
+  RangeBoundaryEvidence,
 } from './sr.types.js';
 
 export type { PriceSource, Candle, Timeframe } from './primitives.js';
@@ -100,6 +102,8 @@ export { evaluateZoneOriginEvidence } from './zone-origin-evidence.js';
 export { classifyFreshnessState } from './zone-freshness.js';
 export { evaluateLiquidityRebuildEvidence } from './zone-liquidity-rebuild.js';
 export { evaluateAbsorptionRisk } from './zone-absorption.js';
+
+export { classifyRangeBoundary } from './range-boundary-classifier.js';
 
 // Error types
 export { SrError } from './sr-errors.js';

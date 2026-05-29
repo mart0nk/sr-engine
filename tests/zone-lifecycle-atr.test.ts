@@ -168,6 +168,60 @@ describe('zone lifecycle ATR propagation and synthetic truth cases', () => {
     expect(result.lifecycle).toBe('INVALIDATED');
     expect(result.invalidatedAt).toBeDefined();
   });
+
+  it('waits for a later candle in the touch session before promoting to TESTED', () => {
+    const zone = makeSupportZone({
+      low: 99,
+      high: 100.5,
+      mid: 99.75,
+      availableFromIndex: 0,
+    });
+    const candles = [
+      makeCandle('2026-01-01T00:00:00.000Z', {
+        open: 100.3,
+        high: 100.4,
+        low: 99.4,
+        close: 99.9,
+      }),
+      makeCandle('2026-01-01T01:00:00.000Z', {
+        open: 99.9,
+        high: 100.2,
+        low: 99.2,
+        close: 99.8,
+      }),
+      makeCandle('2026-01-01T02:00:00.000Z', {
+        open: 99.8,
+        high: 101.2,
+        low: 99.7,
+        close: 100.9,
+      }),
+    ];
+
+    const early = classifyZoneLifecycle({
+      zone,
+      candles: candles.slice(0, 1),
+      startIndex: 0,
+      breakBuffer: 0.05,
+      reclaimBuffer: 0.05,
+      atr: 0.5,
+      config: makeLenientConfig({ trueTestMinReactionStrength: 'WEAK' }),
+    });
+    const full = classifyZoneLifecycle({
+      zone,
+      candles,
+      startIndex: 0,
+      breakBuffer: 0.05,
+      reclaimBuffer: 0.05,
+      atr: 0.5,
+      config: makeLenientConfig({ trueTestMinReactionStrength: 'WEAK' }),
+    });
+
+    expect(early.lifecycle).toBe('FRESH');
+    expect(early.cleanTouchSessions).toBe(0);
+    expect(full.lifecycle).toBe('TESTED');
+    expect(full.cleanTouchSessions).toBe(1);
+    expect(full.reactionQuality?.closedAwayFromZone).toBe(true);
+  });
 });
 
 function mergeLifecycleIntoZone(

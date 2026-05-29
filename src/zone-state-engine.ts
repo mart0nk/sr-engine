@@ -104,6 +104,7 @@ export function classifyZoneLifecycle(input: {
         noisyTouchSessions += 1;
       }
     }
+    const lifecycleTestQualified = touched && qualifiedReactionRejection;
 
     const interaction = classifyInteraction({
       zone,
@@ -131,7 +132,7 @@ export function classifyZoneLifecycle(input: {
           breakCount += 1;
           brokenAt = candle.openTime;
           evidence.push(`BROKEN_DOWN_AT_${candle.openTime.toISOString()}`);
-        } else if (interaction === 'REJECTION' && qualifiedReactionRejection) {
+        } else if ((interaction === 'REJECTION' && qualifiedReactionRejection) || lifecycleTestQualified) {
           lifecycle = 'TESTED';
           rejectionCount += 1;
           lastTouchedAt = candle.openTime;

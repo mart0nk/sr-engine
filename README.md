@@ -243,6 +243,12 @@ The strict validation surface covers:
 - missing or invalid ATR when required
 - missing or invalid tick size when required
 
+Strict validation assumes inclusive candle close times:
+
+- `closeTime = openTime + timeframeMs - 1`
+
+If your data provider uses exclusive close boundaries such as `[openTime, closeTime)`, normalize candles before using `StrictSupportResistanceEngine`.
+
 ## Advanced Exports
 
 The package also exports the lower-level building blocks used by the engine:
@@ -267,7 +273,7 @@ These are useful for diagnostics, custom pipelines, or compatibility shims, but 
 
 A TradingView Pine Script visual companion is available in:
 
-`examples/tradingview/gecko-sr-zones-v22-public-visual.pine`
+`examples/tradingview/sr-zones-v22-public-visual.pine`
 
 This script is intended for chart visualization and public visual review. It is not the canonical SR Engine implementation and should not be used as a parity reference for backend results.
 
