@@ -6,12 +6,54 @@ Deterministic support/resistance engine for OHLCV candle streams.
 
 The package is intentionally data-source agnostic. It does not fetch candles, live prices, ATR, tick size, instrument metadata, or exchange data. Callers provide those inputs and receive a pure `SupportResistanceSnapshot`.
 
-`SupportResistanceEngine` remains the permissive library-mode entrypoint. For production/backtest integrations that require stricter guarantees around candle ordering, closed-bar structure inputs, ATR, tick size, and timeframe continuity, use `StrictSupportResistanceEngine` or `validateSupportResistanceInput(...)`.
+For production/backtest integrations, prefer `StrictSupportResistanceEngine` or `validateSupportResistanceInput(...)`. `SupportResistanceEngine` remains the permissive library-mode entrypoint for callers that already normalize and validate data upstream.
 
 ## Install
 
 ```bash
 npm install sr-engine
+```
+
+## Recommended Usage
+
+For production/backtest integrations, start with `StrictSupportResistanceEngine`.
+It enforces the candle/timeframe/ATR/tick-size contract before delegating into
+the same deterministic SR pipeline as the permissive core engine.
+
+```ts
+import {
+  StrictSupportResistanceEngine,
+  type Candle,
+  type SupportResistanceSnapshot,
+} from "sr-engine";
+
+const strictEngine = new StrictSupportResistanceEngine();
+
+const candles: Candle[] = [
+  {
+    symbol: "BTCUSDT",
+    timeframe: "15m",
+    openTime: new Date("2026-01-01T00:00:00.000Z"),
+    closeTime: new Date("2026-01-01T00:15:00.000Z"),
+    open: 42000,
+    high: 42120,
+    low: 41880,
+    close: 42050,
+    volume: 1200,
+    closed: true,
+  },
+];
+
+const snapshot: SupportResistanceSnapshot = strictEngine.evaluate({
+  symbol: "BTCUSDT",
+  timeframe: "15m",
+  candles,
+  currentPrice: 42100,
+  priceSource: "MARKET_SNAPSHOT",
+  timestamp: new Date(),
+  atr: 180,
+  tickSize: 0.1,
+});
 ```
 
 ## Basic Usage
@@ -160,6 +202,15 @@ Zone tiers:
 type ZoneTier = "ACTIONABLE" | "WATCHABLE" | "CONTEXT" | "DROP";
 ```
 
+Pivot visibility is intentionally next-bar safe:
+
+- `confirmedIndex = pivotIndex + rightBars`
+- `availableFromIndex = confirmedIndex + 1`
+
+This means a pivot or zone becomes visible only after the replay cursor has
+advanced to the bar after the confirming candle. Confirming-candle visibility
+is not part of the current `sr-engine` contract.
+
 ## Configuration
 
 Use defaults for normal operation:
@@ -200,7 +251,7 @@ Stable zone construction policy:
 
 ## Strict Validation
 
-Use the strict validation boundary when the caller needs fail-fast guarantees before running the core engine:
+Use the strict validation boundary when the caller needs fail-fast guarantees before running the core engine. This is the recommended production/backtest path:
 
 ```ts
 import {
