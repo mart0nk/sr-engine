@@ -6,7 +6,7 @@ Deterministic support/resistance engine for OHLCV candle streams.
 
 The package is intentionally data-source agnostic. It does not fetch candles, live prices, ATR, tick size, instrument metadata, or exchange data. Callers provide those inputs and receive a pure `SupportResistanceSnapshot`.
 
-For production/backtest integrations, prefer `StrictSupportResistanceEngine` or `validateSupportResistanceInput(...)`. `SupportResistanceEngine` remains the permissive library-mode entrypoint for callers that already normalize and validate data upstream.
+For production/backtest integrations, prefer `SupportResistanceEngine` or `validateSupportResistanceInput(...)`. The old `StrictSupportResistanceEngine` name remains as a backward-compatible alias. For callers that explicitly want the pre-validation core, use `PermissiveSupportResistanceEngine`.
 
 ## Install
 
@@ -14,54 +14,45 @@ For production/backtest integrations, prefer `StrictSupportResistanceEngine` or 
 npm install sr-engine
 ```
 
-## Recommended Usage
+## 5-minute integration
 
-For production/backtest integrations, start with `StrictSupportResistanceEngine`.
-It enforces the candle/timeframe/ATR/tick-size contract before delegating into
-the same deterministic SR pipeline as the permissive core engine.
+1. Normalize candles to the `Candle` contract.
+2. Decide whether you want permissive mode or strict production validation.
+3. Run the engine in batch mode or accumulate candles through the rolling wrapper.
+4. Convert the snapshot into overlays or scanner facts if your app needs a simpler projection layer.
 
 ```ts
-import {
-  StrictSupportResistanceEngine,
-  type Candle,
-  type SupportResistanceSnapshot,
-} from "sr-engine";
+import { SupportResistanceEngine } from "sr-engine";
+import { toChartOverlays } from "sr-engine/chart";
+import { toScannerFacts } from "sr-engine/facts";
 
-const strictEngine = new StrictSupportResistanceEngine();
+const engine = new SupportResistanceEngine({
+  requireAtr: false,
+  requireTickSize: false,
+});
 
-const candles: Candle[] = [
-  {
-    symbol: "BTCUSDT",
-    timeframe: "15m",
-    openTime: new Date("2026-01-01T00:00:00.000Z"),
-    closeTime: new Date("2026-01-01T00:15:00.000Z"),
-    open: 42000,
-    high: 42120,
-    low: 41880,
-    close: 42050,
-    volume: 1200,
-    closed: true,
-  },
-];
-
-const snapshot: SupportResistanceSnapshot = strictEngine.evaluate({
+const snapshot = engine.evaluate({
   symbol: "BTCUSDT",
   timeframe: "15m",
   candles,
   currentPrice: 42100,
   priceSource: "MARKET_SNAPSHOT",
   timestamp: new Date(),
-  atr: 180,
-  tickSize: 0.1,
 });
+
+const overlays = toChartOverlays(snapshot);
+const facts = toScannerFacts(snapshot);
 ```
 
-## Basic Usage
+## Recommended Usage
+
+For production/backtest integrations, start with `SupportResistanceEngine`.
+It enforces the candle/timeframe/ATR/tick-size contract before delegating into
+the same deterministic SR pipeline as the permissive core engine.
 
 ```ts
 import {
   SupportResistanceEngine,
-  StrictSupportResistanceEngine,
   type Candle,
   type SupportResistanceSnapshot,
 } from "sr-engine";
@@ -73,7 +64,46 @@ const candles: Candle[] = [
     symbol: "BTCUSDT",
     timeframe: "15m",
     openTime: new Date("2026-01-01T00:00:00.000Z"),
-    closeTime: new Date("2026-01-01T00:15:00.000Z"),
+    closeTime: new Date("2026-01-01T00:14:59.999Z"),
+    open: 42000,
+    high: 42120,
+    low: 41880,
+    close: 42050,
+    volume: 1200,
+    closed: true,
+  },
+];
+
+const snapshot: SupportResistanceSnapshot = engine.evaluate({
+  symbol: "BTCUSDT",
+  timeframe: "15m",
+  candles,
+  currentPrice: 42100,
+  priceSource: "MARKET_SNAPSHOT",
+  timestamp: new Date(),
+  atr: 180,
+  tickSize: 0.1,
+});
+```
+
+## Permissive Core Usage
+
+```ts
+import {
+  SupportResistanceEngine,
+  PermissiveSupportResistanceEngine,
+  type Candle,
+  type SupportResistanceSnapshot,
+} from "sr-engine";
+
+const engine = new PermissiveSupportResistanceEngine();
+
+const candles: Candle[] = [
+  {
+    symbol: "BTCUSDT",
+    timeframe: "15m",
+    openTime: new Date("2026-01-01T00:00:00.000Z"),
+    closeTime: new Date("2026-01-01T00:14:59.999Z"),
     open: 42000,
     high: 42120,
     low: 41880,
@@ -101,7 +131,7 @@ console.log(
   snapshot.structureState.rangeLocation,
 );
 
-const strictEngine = new StrictSupportResistanceEngine();
+const strictEngine = new SupportResistanceEngine();
 strictEngine.evaluate({
   symbol: "BTCUSDT",
   timeframe: "15m",
@@ -113,6 +143,41 @@ strictEngine.evaluate({
   tickSize: 0.1,
 });
 ```
+
+## Rolling / live usage
+
+For live-like integrations where candles arrive one by one, use the rolling wrapper.
+It keeps a closed-candle buffer and delegates to the same SR engine under the hood.
+By default, the rolling wrapper now runs in strict validation mode.
+
+```ts
+import { createSupportResistanceRollingEngine } from "sr-engine/rolling";
+
+const rolling = createSupportResistanceRollingEngine({
+  symbol: "BTCUSDT",
+  timeframe: "5m",
+  validationOptions: {
+    requireAtr: false,
+    requireTickSize: false,
+  },
+});
+
+rolling.pushClosedCandle(candle);
+
+const snapshot = rolling.evaluate({
+  currentPrice: 42100,
+  priceSource: "MARKET_SNAPSHOT",
+  timestamp: new Date(),
+});
+```
+
+Rolling wrapper methods:
+
+- `pushClosedCandle(candle)`
+- `pushClosedCandles(candles)`
+- `getCandles()`
+- `reset()`
+- `evaluate(...)`
 
 ## Input Contract
 
@@ -141,7 +206,7 @@ Contract boundary:
 Supported timeframes:
 
 ```ts
-type Timeframe = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
+type Timeframe = "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d";
 ```
 
 ## Output
@@ -175,6 +240,16 @@ Snapshots can be not-ready. In that case `ready` is `false` and `notReadyReason`
 - `readinessReasons`
 
 These fields describe market-structure usability only. They are not trade signals and do not imply buy/sell permission.
+
+## Integration adapters
+
+Two projection helpers are available for app/chart/scanner integrations:
+
+- `toChartOverlays(snapshot)` from `sr-engine/chart`
+- `toScannerFacts(snapshot)` from `sr-engine/facts`
+
+These helpers do not add new SR logic. They only reshape the engine snapshot into
+consumer-friendly structures.
 
 ## Zone Model
 
@@ -255,7 +330,7 @@ Use the strict validation boundary when the caller needs fail-fast guarantees be
 
 ```ts
 import {
-  StrictSupportResistanceEngine,
+  SupportResistanceEngine,
   validateSupportResistanceInput,
 } from "sr-engine";
 
@@ -270,7 +345,7 @@ validateSupportResistanceInput({
   tickSize: 0.01,
 });
 
-const strictEngine = new StrictSupportResistanceEngine();
+const strictEngine = new SupportResistanceEngine();
 const snapshot = strictEngine.evaluate({
   symbol: "ETHUSDT",
   timeframe: "1h",
@@ -283,7 +358,7 @@ const snapshot = strictEngine.evaluate({
 });
 ```
 
-`validateSupportResistanceInput(...)` reports issues. `StrictSupportResistanceEngine` rejects `ERROR` issues before delegating to the permissive core engine.
+`validateSupportResistanceInput(...)` reports issues. `SupportResistanceEngine` rejects `ERROR` issues before delegating to the permissive core engine.
 
 The strict validation surface covers:
 
@@ -298,7 +373,10 @@ Strict validation assumes inclusive candle close times:
 
 - `closeTime = openTime + timeframeMs - 1`
 
-If your data provider uses exclusive close boundaries such as `[openTime, closeTime)`, normalize candles before using `StrictSupportResistanceEngine`.
+If your data provider uses exclusive close boundaries such as `[openTime, closeTime)`, normalize candles before using `SupportResistanceEngine`.
+
+The README examples use the same inclusive convention. For example, a 15m candle opened at
+`2026-01-01T00:00:00.000Z` should close at `2026-01-01T00:14:59.999Z`.
 
 ## Advanced Exports
 
@@ -318,7 +396,15 @@ The package also exports the lower-level building blocks used by the engine:
 - `evaluateLiquidityRebuildEvidence`
 - `evaluateAbsorptionRisk`
 
-These are useful for diagnostics, custom pipelines, or compatibility shims, but most consumers should start with `SupportResistanceEngine`.
+These are useful for diagnostics, custom pipelines, or compatibility shims, but most consumers should start with `SupportResistanceEngine` or the rolling wrapper.
+
+Public subpath exports:
+
+- `sr-engine/config`
+- `sr-engine/types`
+- `sr-engine/rolling`
+- `sr-engine/chart`
+- `sr-engine/facts`
 
 ## TradingView Visual Overlay
 

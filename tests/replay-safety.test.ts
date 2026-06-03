@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SupportResistanceEngine } from '../src/index.js';
+import { PermissiveSupportResistanceEngine } from '../src/index.js';
 import { assertReplayCursorInvariants, makeCandle, makeLenientConfig, normalizeSnapshotForGolden } from './helpers.js';
 
 import type { Candle } from '../src/index.js';
@@ -20,7 +20,7 @@ function makeReplayFixture(): Candle[] {
 describe('replay safety', () => {
   it('never exposes zones before availableFromIndex and preserves cursor-local state', () => {
     const candles = makeReplayFixture();
-    const engine = new SupportResistanceEngine();
+    const engine = new PermissiveSupportResistanceEngine();
     const config = makeLenientConfig({
       pivotLeftBars: 2,
       pivotRightBars: 2,

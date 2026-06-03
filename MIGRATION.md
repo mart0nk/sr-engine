@@ -33,7 +33,9 @@ If you already provide ATR in production or backtests, expect some historical sn
 New exports:
 
 - `validateSupportResistanceInput(...)`
-- `StrictSupportResistanceEngine`
+- `SupportResistanceEngine`
+- `StrictSupportResistanceEngine` (backward-compatible alias)
+- `PermissiveSupportResistanceEngine`
 
 Use these when you want fail-fast guarantees for:
 
@@ -46,7 +48,24 @@ Use these when you want fail-fast guarantees for:
 - gap policy enforcement
 - required ATR/tick size
 
-`validateSupportResistanceInput(...)` reports issues. `StrictSupportResistanceEngine` throws on `ERROR` issues and then evaluates the sanitized closed-candle structure series.
+`validateSupportResistanceInput(...)` reports issues. `SupportResistanceEngine` throws on `ERROR` issues and then evaluates the sanitized closed-candle structure series.
+
+## Breaking Public Rename: SupportResistanceEngine Is Now Strict
+
+Previous behavior:
+
+- `SupportResistanceEngine` was the permissive core evaluator
+
+Current behavior:
+
+- `SupportResistanceEngine` is now the strict/fail-fast wrapper
+- `StrictSupportResistanceEngine` remains as a backward-compatible alias
+- `PermissiveSupportResistanceEngine` exposes the old raw evaluator
+
+Migration guidance:
+
+- if you want the new production/backtest default, keep using `SupportResistanceEngine`
+- if you relied on permissive behavior, switch imports to `PermissiveSupportResistanceEngine`
 
 Strict validation assumes inclusive candle close times:
 
@@ -54,7 +73,7 @@ Strict validation assumes inclusive candle close times:
 
 If your data provider uses exclusive close boundaries, normalize the candle timestamps before using the strict path.
 
-The base `SupportResistanceEngine` remains permissive for library-style usage.
+The old permissive `SupportResistanceEngine` is now exposed as `PermissiveSupportResistanceEngine` for library-style usage.
 
 ## Structure Candles vs Live Current Price
 

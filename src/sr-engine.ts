@@ -59,7 +59,7 @@ type ZoneV2Evidence = {
   freshnessState?: FreshnessState;
 };
 
-export class SupportResistanceEngine {
+export class PermissiveSupportResistanceEngine {
   evaluate(input: SupportResistanceInput): SupportResistanceSnapshot {
     const { symbol, timeframe, candles, timestamp } = input;
     const price = input.currentPrice;

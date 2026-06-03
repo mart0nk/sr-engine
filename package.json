@@ -1,6 +1,17 @@
 {
   "name": "sr-engine",
   "version": "0.2.0",
+  "description": "Deterministic support/resistance engine for OHLCV candle streams.",
+  "keywords": [
+    "trading",
+    "technical-analysis",
+    "support-resistance",
+    "ohlcv",
+    "typescript",
+    "crypto"
+  ],
+  "license": "MIT",
+  "author": "mart0nk",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -8,12 +19,33 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./config": {
+      "import": "./dist/config.js",
+      "types": "./dist/config.d.ts"
+    },
+    "./types": {
+      "import": "./dist/types.js",
+      "types": "./dist/types.d.ts"
+    },
+    "./rolling": {
+      "import": "./dist/rolling-engine.js",
+      "types": "./dist/rolling-engine.d.ts"
+    },
+    "./chart": {
+      "import": "./dist/chart.js",
+      "types": "./dist/chart.d.ts"
+    },
+    "./facts": {
+      "import": "./dist/facts.js",
+      "types": "./dist/facts.d.ts"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
+    "test:package-smoke": "node ./scripts/package-smoke.mjs",
     "prepublishOnly": "npm run typecheck && npm test && npm run build",
     "prepare": "npm run build"
   },
@@ -24,6 +56,12 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mart0nk/sr-engine.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "bugs": {
     "url": "https://github.com/mart0nk/sr-engine/issues"

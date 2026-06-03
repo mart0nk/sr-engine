@@ -1,11 +1,23 @@
 // Engine
-export { SupportResistanceEngine, SrErrors, zonesOverlap, getMinCleanRangeGap, classifyS1R1Conflict } from './sr-engine.js';
+export {
+  PermissiveSupportResistanceEngine,
+  SrErrors,
+  zonesOverlap,
+  getMinCleanRangeGap,
+  classifyS1R1Conflict,
+} from './sr-engine.js';
 export type { SupportResistanceInput } from './sr-engine.js';
-export { StrictSupportResistanceEngine } from './strict-engine.js';
+export { SupportResistanceEngine, StrictSupportResistanceEngine } from './strict-engine.js';
+export {
+  SupportResistanceRollingEngine,
+  createSupportResistanceRollingEngine,
+} from './rolling-engine.js';
 export {
   resolveSupportResistanceValidationOptions,
   validateSupportResistanceInput,
 } from './strict-validation.js';
+export { toChartOverlays } from './chart.js';
+export { toScannerFacts } from './facts.js';
 
 // Config
 export {
@@ -20,6 +32,17 @@ export type {
   SrValidationIssue,
   SrValidationIssueCode,
 } from './strict-validation.js';
+export type {
+  SupportResistanceRollingEngineOptions,
+  SupportResistanceRollingEvaluateInput,
+} from './rolling-engine.js';
+export type {
+  ChartOverlay,
+  ChartOverlayKind,
+  ChartOverlayOptions,
+  ChartOverlayState,
+} from './chart.js';
+export type { ScannerFact, ScannerFactCode, ScannerFactSeverity } from './facts.js';
 
 // Types
 export type {

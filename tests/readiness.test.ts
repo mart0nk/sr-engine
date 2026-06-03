@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { SupportResistanceEngine } from '../src/index.js';
+import { PermissiveSupportResistanceEngine } from '../src/index.js';
 import { makeCandle, makeLenientConfig } from './helpers.js';
 
 describe('readiness semantics', () => {
   it('marks insufficient candles as not engine-ready', () => {
-    const engine = new SupportResistanceEngine();
+    const engine = new PermissiveSupportResistanceEngine();
     const result = engine.evaluate({
       symbol: 'BTCUSDT',
       timeframe: '1h',
@@ -23,7 +23,7 @@ describe('readiness semantics', () => {
   });
 
   it('marks no-valid-pivots as engine-ready but structure-not-ready', () => {
-    const engine = new SupportResistanceEngine();
+    const engine = new PermissiveSupportResistanceEngine();
     const candles = [
       makeCandle('2026-01-01T00:00:00.000Z', { open: 100, high: 101, low: 99.5, close: 100.5 }),
       makeCandle('2026-01-01T01:00:00.000Z', { open: 100.5, high: 102, low: 100, close: 101.5 }),

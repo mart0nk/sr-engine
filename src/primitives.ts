@@ -1,7 +1,7 @@
 // Primitive types copied from src/market-data/market-data.types.ts
 // The package must not import from the app src/ tree.
 
-export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
+export type Timeframe = '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d';
 
 export type Candle = {
   symbol: string;

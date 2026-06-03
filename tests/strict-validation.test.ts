@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  SupportResistanceEngine,
   StrictSupportResistanceEngine,
   validateSupportResistanceInput,
 } from '../src/index.js';
@@ -81,6 +82,33 @@ describe('strict validation', () => {
     );
   });
 
+  it('accepts 30m candles as a valid timeframe contract', () => {
+    const issues = validateSupportResistanceInput(
+      {
+        symbol: 'BTCUSDT',
+        timeframe: '30m',
+        candles: [
+          makeCandle('2026-01-01T00:00:00.000Z', {
+            timeframe: '30m',
+            closeTime: new Date('2026-01-01T00:29:59.999Z'),
+          }),
+          makeCandle('2026-01-01T00:30:00.000Z', {
+            timeframe: '30m',
+            closeTime: new Date('2026-01-01T00:59:59.999Z'),
+          }),
+        ],
+        currentPrice: 100,
+        priceSource: 'MARKET_SNAPSHOT',
+        timestamp: new Date('2026-01-01T01:00:00.000Z'),
+        atr: 5,
+        tickSize: 0.1,
+      },
+      { gapPolicy: 'reject' },
+    );
+
+    expect(issues).toEqual([]);
+  });
+
   it('rejects timeframe gaps in reject mode and downgrades them to warnings in warn mode', () => {
     const first = makeCandle('2026-01-01T00:00:00.000Z');
     const gap = makeCandle('2026-01-01T03:00:00.000Z');
@@ -126,7 +154,7 @@ describe('strict validation', () => {
       closeTime: new Date('2026-01-01T01:59:59.999Z'),
       closed: false,
     });
-    const engine = new StrictSupportResistanceEngine({
+    const engine = new SupportResistanceEngine({
       allowLatestOpenCandleAsPriceContext: true,
       requireAtr: false,
       requireTickSize: false,
@@ -157,7 +185,7 @@ describe('strict validation', () => {
   });
 
   it('strict engine throws on blocking validation issues', () => {
-    const engine = new StrictSupportResistanceEngine();
+    const engine = new SupportResistanceEngine();
 
     expect(() =>
       engine.evaluate({
@@ -172,5 +200,9 @@ describe('strict validation', () => {
         timestamp: new Date('2026-01-01T01:00:00.000Z'),
       }),
     ).toThrowError(/validation failed/i);
+  });
+
+  it('keeps StrictSupportResistanceEngine as a backward-compatible alias', () => {
+    expect(StrictSupportResistanceEngine).toBe(SupportResistanceEngine);
   });
 });
