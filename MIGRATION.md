@@ -50,6 +50,23 @@ Use these when you want fail-fast guarantees for:
 
 `validateSupportResistanceInput(...)` reports issues. `SupportResistanceEngine` throws on `ERROR` issues and then evaluates the sanitized closed-candle structure series.
 
+## Breaking Public Rename: SupportResistanceEngine Is Now Strict
+
+Previous behavior:
+
+- `SupportResistanceEngine` was the permissive core evaluator
+
+Current behavior:
+
+- `SupportResistanceEngine` is now the strict/fail-fast wrapper
+- `StrictSupportResistanceEngine` remains as a backward-compatible alias
+- `PermissiveSupportResistanceEngine` exposes the old raw evaluator
+
+Migration guidance:
+
+- if you want the new production/backtest default, keep using `SupportResistanceEngine`
+- if you relied on permissive behavior, switch imports to `PermissiveSupportResistanceEngine`
+
 Strict validation assumes inclusive candle close times:
 
 - `closeTime = openTime + timeframeMs - 1`

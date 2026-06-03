@@ -33,6 +33,7 @@ describe('SupportResistanceRollingEngine', () => {
     const rolling = createSupportResistanceRollingEngine({
       symbol: 'BTCUSDT',
       timeframe: '1h',
+      strict: false,
       config,
     });
 

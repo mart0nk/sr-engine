@@ -64,7 +64,7 @@ const candles: Candle[] = [
     symbol: "BTCUSDT",
     timeframe: "15m",
     openTime: new Date("2026-01-01T00:00:00.000Z"),
-    closeTime: new Date("2026-01-01T00:15:00.000Z"),
+    closeTime: new Date("2026-01-01T00:14:59.999Z"),
     open: 42000,
     high: 42120,
     low: 41880,
@@ -103,7 +103,7 @@ const candles: Candle[] = [
     symbol: "BTCUSDT",
     timeframe: "15m",
     openTime: new Date("2026-01-01T00:00:00.000Z"),
-    closeTime: new Date("2026-01-01T00:15:00.000Z"),
+    closeTime: new Date("2026-01-01T00:14:59.999Z"),
     open: 42000,
     high: 42120,
     low: 41880,
@@ -148,6 +148,7 @@ strictEngine.evaluate({
 
 For live-like integrations where candles arrive one by one, use the rolling wrapper.
 It keeps a closed-candle buffer and delegates to the same SR engine under the hood.
+By default, the rolling wrapper now runs in strict validation mode.
 
 ```ts
 import { createSupportResistanceRollingEngine } from "sr-engine/rolling";
@@ -155,7 +156,6 @@ import { createSupportResistanceRollingEngine } from "sr-engine/rolling";
 const rolling = createSupportResistanceRollingEngine({
   symbol: "BTCUSDT",
   timeframe: "5m",
-  strict: true,
   validationOptions: {
     requireAtr: false,
     requireTickSize: false,
@@ -374,6 +374,9 @@ Strict validation assumes inclusive candle close times:
 - `closeTime = openTime + timeframeMs - 1`
 
 If your data provider uses exclusive close boundaries such as `[openTime, closeTime)`, normalize candles before using `SupportResistanceEngine`.
+
+The README examples use the same inclusive convention. For example, a 15m candle opened at
+`2026-01-01T00:00:00.000Z` should close at `2026-01-01T00:14:59.999Z`.
 
 ## Advanced Exports
 

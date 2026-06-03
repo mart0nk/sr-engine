@@ -7,6 +7,7 @@
 - Lifecycle reaction classification now uses ATR when ATR is provided to `SupportResistanceEngine.evaluate(...)`, including the `FRESH -> TESTED` promotion threshold via `trueTestMinReactionStrength`. This can change lifecycle, quality, and readiness outcomes for volatility-sensitive zones.
 - The stable public `ZoneConstructionPolicy` surface now exposes only `WICK_TO_BODY`.
 - `ready` is now documented as a legacy coarse readiness flag.
+- `SupportResistanceRollingEngine` now defaults to `strict: true`, matching the strict-first public engine direction.
 
 ### Added
 
@@ -37,4 +38,5 @@
 ### Notes
 
 - This working tree is now versioned as `0.2.0`.
+- Breaking behavior change for consumers that already imported `SupportResistanceEngine`: it now performs strict validation before evaluation. Use `PermissiveSupportResistanceEngine` if you need the old permissive behavior.
 - If you consume `sr-engine` as a stable external API, treat the config-surface narrowing and changed ATR-sensitive lifecycle behavior as a contract-change release.

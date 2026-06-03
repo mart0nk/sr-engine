@@ -41,7 +41,7 @@ export class SupportResistanceRollingEngine {
   constructor(options: SupportResistanceRollingEngineOptions) {
     this.symbol = options.symbol;
     this.timeframe = options.timeframe;
-    this.strict = options.strict ?? false;
+    this.strict = options.strict ?? true;
     this.baseConfig = options.config;
     this.baseValidationOptions = options.validationOptions;
     this.maxCandles = options.maxCandles;
