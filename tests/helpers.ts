@@ -243,6 +243,8 @@ export function timeframeToMs(timeframe: Candle['timeframe']): number {
       return 300_000;
     case '15m':
       return 900_000;
+    case '30m':
+      return 1_800_000;
     case '1h':
       return 3_600_000;
     case '4h':
