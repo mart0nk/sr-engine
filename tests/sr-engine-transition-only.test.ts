@@ -67,7 +67,7 @@ vi.mock('../src/zone-kind.js', async () => {
   };
 });
 
-import { SupportResistanceEngine } from '../src/index.js';
+import { PermissiveSupportResistanceEngine } from '../src/index.js';
 
 function makeCandle(): Candle {
   return {
@@ -114,7 +114,7 @@ function makeZone(): SupportResistanceZone {
   };
 }
 
-describe('SupportResistanceEngine transition-only snapshots', () => {
+describe('PermissiveSupportResistanceEngine transition-only snapshots', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -176,7 +176,7 @@ describe('SupportResistanceEngine transition-only snapshots', () => {
   });
 
   it('returns NO_PUBLIC_ACTIVE_ZONES while preserving transition zones', () => {
-    const engine = new SupportResistanceEngine();
+    const engine = new PermissiveSupportResistanceEngine();
 
     const result = engine.evaluate({
       symbol: 'BTCUSDT',

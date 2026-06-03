@@ -1,5 +1,5 @@
 import { toChartOverlays } from 'sr-engine/chart';
-import { StrictSupportResistanceEngine } from 'sr-engine';
+import { SupportResistanceEngine } from 'sr-engine';
 
 import type { Candle } from 'sr-engine/types';
 
@@ -18,7 +18,7 @@ const candles: Candle[] = [
   },
 ];
 
-const engine = new StrictSupportResistanceEngine({
+const engine = new SupportResistanceEngine({
   requireAtr: false,
   requireTickSize: false,
 });

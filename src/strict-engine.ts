@@ -1,7 +1,7 @@
 import type { SupportResistanceSnapshot } from './sr.types.js';
 import type { SupportResistanceInput } from './sr-engine.js';
 
-import { SupportResistanceEngine } from './sr-engine.js';
+import { PermissiveSupportResistanceEngine } from './sr-engine.js';
 import { SrErrors } from './sr-errors.js';
 import {
   type SupportResistanceValidationOptions,
@@ -9,13 +9,13 @@ import {
   validateSupportResistanceInput,
 } from './strict-validation.js';
 
-export class StrictSupportResistanceEngine {
-  private readonly engine: SupportResistanceEngine;
+export class SupportResistanceEngine {
+  private readonly engine: PermissiveSupportResistanceEngine;
   private readonly validationOptions: SupportResistanceValidationOptions;
 
   constructor(
     validationOptions: SupportResistanceValidationOptions = {},
-    engine = new SupportResistanceEngine(),
+    engine = new PermissiveSupportResistanceEngine(),
   ) {
     this.validationOptions = validationOptions;
     this.engine = engine;
@@ -56,3 +56,5 @@ function sanitizeInputForStrictEvaluation(
 
   return input;
 }
+
+export const StrictSupportResistanceEngine = SupportResistanceEngine;

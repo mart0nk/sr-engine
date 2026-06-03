@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  SupportResistanceEngine,
+  PermissiveSupportResistanceEngine,
   createSupportResistanceRollingEngine,
 } from '../src/index.js';
 import { makeCandle, makeLenientConfig, normalizeSnapshotForGolden } from './helpers.js';
@@ -29,7 +29,7 @@ describe('SupportResistanceRollingEngine', () => {
       zoneTierWatchableMinScore: 20,
       zoneTierContextMinScore: 0,
     });
-    const stateless = new SupportResistanceEngine();
+    const stateless = new PermissiveSupportResistanceEngine();
     const rolling = createSupportResistanceRollingEngine({
       symbol: 'BTCUSDT',
       timeframe: '1h',

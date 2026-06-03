@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  SupportResistanceEngine,
   StrictSupportResistanceEngine,
   validateSupportResistanceInput,
 } from '../src/index.js';
@@ -126,7 +127,7 @@ describe('strict validation', () => {
       closeTime: new Date('2026-01-01T01:59:59.999Z'),
       closed: false,
     });
-    const engine = new StrictSupportResistanceEngine({
+    const engine = new SupportResistanceEngine({
       allowLatestOpenCandleAsPriceContext: true,
       requireAtr: false,
       requireTickSize: false,
@@ -157,7 +158,7 @@ describe('strict validation', () => {
   });
 
   it('strict engine throws on blocking validation issues', () => {
-    const engine = new StrictSupportResistanceEngine();
+    const engine = new SupportResistanceEngine();
 
     expect(() =>
       engine.evaluate({
@@ -172,5 +173,9 @@ describe('strict validation', () => {
         timestamp: new Date('2026-01-01T01:00:00.000Z'),
       }),
     ).toThrowError(/validation failed/i);
+  });
+
+  it('keeps StrictSupportResistanceEngine as a backward-compatible alias', () => {
+    expect(StrictSupportResistanceEngine).toBe(SupportResistanceEngine);
   });
 });

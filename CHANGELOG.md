@@ -10,7 +10,9 @@
 
 ### Added
 
-- `StrictSupportResistanceEngine` for fail-fast production/backtest integration.
+- `SupportResistanceEngine` is now the canonical fail-fast production/backtest wrapper name.
+- `StrictSupportResistanceEngine` remains as a backward-compatible alias.
+- `PermissiveSupportResistanceEngine` exposes the old pre-validation core evaluator for advanced/library use.
 - `validateSupportResistanceInput(...)` and a typed validation issue taxonomy.
 - `SupportResistanceRollingEngine` and `createSupportResistanceRollingEngine(...)` for live/incremental closed-candle integrations.
 - `toChartOverlays(snapshot)` for chart-friendly zone projections.

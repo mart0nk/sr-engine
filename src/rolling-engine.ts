@@ -1,5 +1,5 @@
-import { SupportResistanceEngine } from './sr-engine.js';
-import { StrictSupportResistanceEngine } from './strict-engine.js';
+import { PermissiveSupportResistanceEngine } from './sr-engine.js';
+import { SupportResistanceEngine } from './strict-engine.js';
 import { resolveSupportResistanceConfig } from './sr-config.js';
 import { SrErrors } from './sr-errors.js';
 
@@ -34,8 +34,8 @@ export class SupportResistanceRollingEngine {
   private readonly maxCandles: number | undefined;
   private readonly baseConfig: Partial<SupportResistanceConfig> | undefined;
   private readonly baseValidationOptions: SupportResistanceValidationOptions | undefined;
-  private readonly permissiveEngine = new SupportResistanceEngine();
-  private readonly strictEngine: StrictSupportResistanceEngine;
+  private readonly permissiveEngine = new PermissiveSupportResistanceEngine();
+  private readonly strictEngine: SupportResistanceEngine;
   private candles: Candle[] = [];
 
   constructor(options: SupportResistanceRollingEngineOptions) {
@@ -45,7 +45,7 @@ export class SupportResistanceRollingEngine {
     this.baseConfig = options.config;
     this.baseValidationOptions = options.validationOptions;
     this.maxCandles = options.maxCandles;
-    this.strictEngine = new StrictSupportResistanceEngine(options.validationOptions);
+    this.strictEngine = new SupportResistanceEngine(options.validationOptions);
 
     if (this.maxCandles !== undefined && (!Number.isInteger(this.maxCandles) || this.maxCandles < 1)) {
       throw new RangeError('Rolling engine maxCandles must be a positive integer.');

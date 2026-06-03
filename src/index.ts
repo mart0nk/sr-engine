@@ -1,7 +1,13 @@
 // Engine
-export { SupportResistanceEngine, SrErrors, zonesOverlap, getMinCleanRangeGap, classifyS1R1Conflict } from './sr-engine.js';
+export {
+  PermissiveSupportResistanceEngine,
+  SrErrors,
+  zonesOverlap,
+  getMinCleanRangeGap,
+  classifyS1R1Conflict,
+} from './sr-engine.js';
 export type { SupportResistanceInput } from './sr-engine.js';
-export { StrictSupportResistanceEngine } from './strict-engine.js';
+export { SupportResistanceEngine, StrictSupportResistanceEngine } from './strict-engine.js';
 export {
   SupportResistanceRollingEngine,
   createSupportResistanceRollingEngine,

@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_SUPPORT_RESISTANCE_CONFIG,
-  SupportResistanceEngine,
+  PermissiveSupportResistanceEngine,
 } from '../src/index.js';
 import { REAL_MARKET_FIXTURES } from './fixtures/real-market-fixtures.js';
 import { REAL_MARKET_GOLDENS } from './golden/real-market.golden.js';
 import { assertReplayCursorInvariants, normalizeSnapshotForGolden } from './helpers.js';
 
 describe('real-market golden regression', () => {
-  const engine = new SupportResistanceEngine();
+  const engine = new PermissiveSupportResistanceEngine();
 
   for (const fixture of REAL_MARKET_FIXTURES) {
     it(`matches normalized golden checkpoints for ${fixture.id}`, () => {
