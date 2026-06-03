@@ -12,6 +12,9 @@
 
 - `StrictSupportResistanceEngine` for fail-fast production/backtest integration.
 - `validateSupportResistanceInput(...)` and a typed validation issue taxonomy.
+- `SupportResistanceRollingEngine` and `createSupportResistanceRollingEngine(...)` for live/incremental closed-candle integrations.
+- `toChartOverlays(snapshot)` for chart-friendly zone projections.
+- `toScannerFacts(snapshot)` for scanner-friendly market-structure facts.
 - Additive readiness fields:
   - `legacyReady`
   - `engineReady`
@@ -22,6 +25,12 @@
   - `readinessReasons`
 - Replay/no-lookahead regression coverage with synthetic fixtures.
 - Compact real-market regression fixtures with provenance and normalized golden checkpoints.
+- Public integration-oriented subpath exports:
+  - `sr-engine/config`
+  - `sr-engine/types`
+  - `sr-engine/rolling`
+  - `sr-engine/chart`
+  - `sr-engine/facts`
 
 ### Notes
 

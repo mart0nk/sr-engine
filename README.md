@@ -14,6 +14,36 @@ For production/backtest integrations, prefer `StrictSupportResistanceEngine` or 
 npm install sr-engine
 ```
 
+## 5-minute integration
+
+1. Normalize candles to the `Candle` contract.
+2. Decide whether you want permissive mode or strict production validation.
+3. Run the engine in batch mode or accumulate candles through the rolling wrapper.
+4. Convert the snapshot into overlays or scanner facts if your app needs a simpler projection layer.
+
+```ts
+import { StrictSupportResistanceEngine } from "sr-engine";
+import { toChartOverlays } from "sr-engine/chart";
+import { toScannerFacts } from "sr-engine/facts";
+
+const engine = new StrictSupportResistanceEngine({
+  requireAtr: false,
+  requireTickSize: false,
+});
+
+const snapshot = engine.evaluate({
+  symbol: "BTCUSDT",
+  timeframe: "15m",
+  candles,
+  currentPrice: 42100,
+  priceSource: "MARKET_SNAPSHOT",
+  timestamp: new Date(),
+});
+
+const overlays = toChartOverlays(snapshot);
+const facts = toScannerFacts(snapshot);
+```
+
 ## Recommended Usage
 
 For production/backtest integrations, start with `StrictSupportResistanceEngine`.
@@ -114,6 +144,41 @@ strictEngine.evaluate({
 });
 ```
 
+## Rolling / live usage
+
+For live-like integrations where candles arrive one by one, use the rolling wrapper.
+It keeps a closed-candle buffer and delegates to the same SR engine under the hood.
+
+```ts
+import { createSupportResistanceRollingEngine } from "sr-engine/rolling";
+
+const rolling = createSupportResistanceRollingEngine({
+  symbol: "BTCUSDT",
+  timeframe: "5m",
+  strict: true,
+  validationOptions: {
+    requireAtr: false,
+    requireTickSize: false,
+  },
+});
+
+rolling.pushClosedCandle(candle);
+
+const snapshot = rolling.evaluate({
+  currentPrice: 42100,
+  priceSource: "MARKET_SNAPSHOT",
+  timestamp: new Date(),
+});
+```
+
+Rolling wrapper methods:
+
+- `pushClosedCandle(candle)`
+- `pushClosedCandles(candles)`
+- `getCandles()`
+- `reset()`
+- `evaluate(...)`
+
 ## Input Contract
 
 ```ts
@@ -175,6 +240,16 @@ Snapshots can be not-ready. In that case `ready` is `false` and `notReadyReason`
 - `readinessReasons`
 
 These fields describe market-structure usability only. They are not trade signals and do not imply buy/sell permission.
+
+## Integration adapters
+
+Two projection helpers are available for app/chart/scanner integrations:
+
+- `toChartOverlays(snapshot)` from `sr-engine/chart`
+- `toScannerFacts(snapshot)` from `sr-engine/facts`
+
+These helpers do not add new SR logic. They only reshape the engine snapshot into
+consumer-friendly structures.
 
 ## Zone Model
 
@@ -318,7 +393,15 @@ The package also exports the lower-level building blocks used by the engine:
 - `evaluateLiquidityRebuildEvidence`
 - `evaluateAbsorptionRisk`
 
-These are useful for diagnostics, custom pipelines, or compatibility shims, but most consumers should start with `SupportResistanceEngine`.
+These are useful for diagnostics, custom pipelines, or compatibility shims, but most consumers should start with `StrictSupportResistanceEngine` or the rolling wrapper.
+
+Public subpath exports:
+
+- `sr-engine/config`
+- `sr-engine/types`
+- `sr-engine/rolling`
+- `sr-engine/chart`
+- `sr-engine/facts`
 
 ## TradingView Visual Overlay
 

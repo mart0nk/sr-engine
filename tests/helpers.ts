@@ -60,6 +60,45 @@ export function makeSupportZone(overrides: Partial<SupportResistanceZone> = {}):
   };
 }
 
+export function makeSnapshot(
+  overrides: Partial<SupportResistanceSnapshot> = {},
+): SupportResistanceSnapshot {
+  const timestamp = new Date('2026-01-01T00:00:00.000Z');
+
+  return {
+    symbol: 'BTCUSDT',
+    timeframe: '1h',
+    timestamp,
+    price: 100,
+    priceSource: 'MARKET_SNAPSHOT',
+    supportZones: [],
+    resistanceZones: [],
+    structureState: {
+      aboveSupport: false,
+      belowResistance: false,
+      insideZone: false,
+    },
+    ready: false,
+    legacyReady: false,
+    engineReady: false,
+    structureReady: false,
+    actionableStructureReady: false,
+    boundedRangeReady: false,
+    locationContextUsable: false,
+    readinessReasons: {
+      engine: [],
+      structure: [],
+      actionable: [],
+      range: [],
+      location: [],
+    },
+    missing: [],
+    warnings: [],
+    evidence: [],
+    ...overrides,
+  };
+}
+
 export function makeLenientConfig(
   overrides: Partial<SupportResistanceConfig> = {},
 ): SupportResistanceConfig {
