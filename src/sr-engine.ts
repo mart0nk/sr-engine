@@ -38,6 +38,7 @@ import { evaluateLiquidityRebuildEvidence } from './zone-liquidity-rebuild.js';
 import { evaluateAbsorptionRisk } from './zone-absorption.js';
 import { classifyFreshnessState } from './zone-freshness.js';
 import { classifyRangeBoundary } from './range-boundary-classifier.js';
+import { resolveDescriptiveRangeContext } from './descriptive-range-context.js';
 
 export type SupportResistanceInput = {
   symbol: string;
@@ -466,6 +467,17 @@ export class PermissiveSupportResistanceEngine {
       }
     }
 
+    const descriptiveRangeContext = resolveDescriptiveRangeContext({
+      price,
+      ...(s1 !== undefined ? { s1 } : {}),
+      ...(r1 !== undefined ? { r1 } : {}),
+      engineRangeLocation: rangeLocation,
+      supportZones,
+      resistanceZones,
+      contextZones,
+      transitionZones,
+    });
+
     const aboveSupport =
       closestSupport !== undefined ? price >= closestSupport.low : false;
     const belowResistance =
@@ -629,7 +641,8 @@ export class PermissiveSupportResistanceEngine {
       warnings: [...new Set(warnings)] as StructureWarning[],
       evidence: [...new Set(evidence)],
       structureAvailability,
-      diagnostics
+      diagnostics,
+      descriptiveRangeContext
     };
     if (conflictResolvedZones.length > 0)
       snapshotResult.conflictResolvedZones = conflictResolvedZones;
