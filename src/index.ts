@@ -91,6 +91,9 @@ export type {
   ZoneObviousness,
   ZoneEvidence,
   RangeLocation,
+  DescriptiveRangeLocation,
+  DescriptiveRangeSource,
+  DescriptiveRangeContext,
   SrConflictType,
   SrBottleneck,
   PathToTargetQuality,
@@ -127,6 +130,7 @@ export { evaluateLiquidityRebuildEvidence } from './zone-liquidity-rebuild.js';
 export { evaluateAbsorptionRisk } from './zone-absorption.js';
 
 export { classifyRangeBoundary } from './range-boundary-classifier.js';
+export { resolveDescriptiveRangeContext } from './descriptive-range-context.js';
 
 // Error types
 export { SrError } from './sr-errors.js';

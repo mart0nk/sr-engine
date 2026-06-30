@@ -406,6 +406,55 @@ export type RangeLocation =
   | 'UNDEFINED'
   | 'COMPRESSED_OR_OVERLAPPING_RANGE';
 
+export type DescriptiveRangeLocation =
+  | 'NEAR_SUPPORT'
+  | 'MIDDLE'
+  | 'NEAR_RESISTANCE'
+  | 'OUTSIDE_RANGE'
+  | 'ONE_SIDED_SUPPORT'
+  | 'ONE_SIDED_RESISTANCE'
+  | 'COMPRESSED_OR_OVERLAPPING_RANGE'
+  | 'UNDEFINED';
+
+export type DescriptiveRangeSource =
+  | 'ACTIONABLE_PAIR'
+  | 'WATCHABLE_PAIR'
+  | 'CONTEXT_PAIR'
+  | 'MIXED_ACTIONABLE_CONTEXT_PAIR'
+  | 'ONE_SIDED_SUPPORT'
+  | 'ONE_SIDED_RESISTANCE'
+  | 'INSUFFICIENT_STRUCTURE';
+
+export type DescriptiveRangeContext = {
+  rangeLocation: DescriptiveRangeLocation;
+  source: DescriptiveRangeSource;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  nearestSupport?: {
+    id: string;
+    low: number;
+    high: number;
+    mid: number;
+    tier?: ZoneTier;
+    kind?: string;
+    source: 'ACTIONABLE' | 'WATCHABLE' | 'CONTEXT';
+  };
+  nearestResistance?: {
+    id: string;
+    low: number;
+    high: number;
+    mid: number;
+    tier?: ZoneTier;
+    kind?: string;
+    source: 'ACTIONABLE' | 'WATCHABLE' | 'CONTEXT';
+  };
+  missingReason?:
+    | 'NO_VALID_SUPPORT_BOUNDARY'
+    | 'NO_VALID_RESISTANCE_BOUNDARY'
+    | 'NO_VALID_BOUNDARIES'
+    | 'INSUFFICIENT_STRUCTURE'
+    | 'COMPRESSED_OR_OVERLAPPING_RANGE';
+};
+
 export type SrConflictType =
   | 'S1_R1_OVERLAP'
   | 'S1_R1_TOUCHING'
@@ -568,6 +617,7 @@ export type SupportResistanceSnapshot = {
   conflictResolvedZones?: ConflictResolvedZone[];
   structureAvailability?: SupportResistanceAvailability;
   diagnostics?: SupportResistanceDiagnostics;
+  descriptiveRangeContext?: DescriptiveRangeContext;
 
   structureState: {
     aboveSupport: boolean;
