@@ -435,7 +435,7 @@ export type DescriptiveRangeContext = {
     high: number;
     mid: number;
     tier?: ZoneTier;
-    kind?: string;
+    kind?: ZoneKind | ContextZoneKind;
     source: 'ACTIONABLE' | 'WATCHABLE' | 'CONTEXT';
   };
   nearestResistance?: {
@@ -444,7 +444,7 @@ export type DescriptiveRangeContext = {
     high: number;
     mid: number;
     tier?: ZoneTier;
-    kind?: string;
+    kind?: ZoneKind | ContextZoneKind;
     source: 'ACTIONABLE' | 'WATCHABLE' | 'CONTEXT';
   };
   missingReason?:

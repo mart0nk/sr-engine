@@ -471,12 +471,11 @@ export class PermissiveSupportResistanceEngine {
       price,
       ...(s1 !== undefined ? { s1 } : {}),
       ...(r1 !== undefined ? { r1 } : {}),
+      engineRangeLocation: rangeLocation,
       supportZones,
       resistanceZones,
       contextZones,
       transitionZones,
-      ...(atr !== undefined ? { atr } : {}),
-      ...(tickSize !== undefined ? { tickSize } : {}),
     });
 
     const aboveSupport =
