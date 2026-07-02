@@ -112,6 +112,50 @@ describe('zone lifecycle ATR propagation and synthetic truth cases', () => {
     expect(result.flippedAt).toBeDefined();
   });
 
+  it('does NOT flip when retest candle barely wicks zone.low but does not reach zone.mid', () => {
+    // Reproduces the premature SUPPORT→RESISTANCE flip pattern:
+    // breakdown candle + next candle grazes zone.low from below (high < zone.mid) and closes
+    // well below. Previously this was enough to trigger RETEST_FROM_BELOW_REJECTED.
+    // Zone: low=100, high=100.5, mid=100.25
+    const result = classifyZoneLifecycle({
+      zone: makeSupportZone({ low: 100, high: 100.5, mid: 100.25 }),
+      candles: [
+        // Candle 1 — breakdown: close(99.5) < zone.low(100) - breakBuffer(0.05) = 99.95
+        makeCandle('2026-01-01T00:00:00.000Z', { open: 100.1, high: 100.2, low: 99.3, close: 99.5 }),
+        // Candle 2 — shallow wick: high(100.2) < zone.mid(100.25); close(99.7) well below mid
+        makeCandle('2026-01-01T01:00:00.000Z', { open: 99.5, high: 100.2, low: 99.2, close: 99.7 }),
+      ],
+      startIndex: 0,
+      breakBuffer: 0.05,
+      reclaimBuffer: 0.05,
+      config: makeLenientConfig(),
+    });
+
+    expect(result.lifecycle).toBe('BROKEN');
+    expect(result.role).toBe('SUPPORT');
+    expect(result.flippedAt).toBeUndefined();
+  });
+
+  it('flips broken support when retest candle reaches zone.mid then closes below it', () => {
+    // Zone: low=100, high=100.5, mid=100.25
+    // Candle 2 high(100.3) >= zone.mid(100.25) → genuine attempt; close(99.9) < 100.20 → rejected
+    const result = classifyZoneLifecycle({
+      zone: makeSupportZone({ low: 100, high: 100.5, mid: 100.25 }),
+      candles: [
+        makeCandle('2026-01-01T00:00:00.000Z', { open: 100.1, high: 100.2, low: 99.3, close: 99.5 }),
+        makeCandle('2026-01-01T01:00:00.000Z', { open: 99.5, high: 100.3, low: 99.2, close: 99.9 }),
+      ],
+      startIndex: 0,
+      breakBuffer: 0.05,
+      reclaimBuffer: 0.05,
+      config: makeLenientConfig(),
+    });
+
+    expect(result.lifecycle).toBe('FLIPPED');
+    expect(result.role).toBe('RESISTANCE');
+    expect(result.flippedAt).toBeDefined();
+  });
+
   it('flips broken resistance into support after a retest from above', () => {
     const result = classifyZoneLifecycle({
       zone: makeResistanceZone(),
