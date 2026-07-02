@@ -307,7 +307,18 @@ function classifyInteraction(input: {
     }
 
     if (breakDirection === 'DOWN') {
-      if (touched && previousClose < zone.low && candle.close < zone.mid - reclaimBuffer) {
+      // Require the retest candle to reach at least zone.mid before being classified as
+      // rejected. Without this guard a candle that barely wicks zone.low from below
+      // (high just above zone.low, close well below) satisfies all other conditions and
+      // triggers a premature SUPPORT→RESISTANCE flip — the candle never made a genuine
+      // reclaim attempt. Symmetric with RETEST_FROM_ABOVE_HELD where the close must
+      // exceed zone.mid + reclaimBuffer, proving the candle held deep inside the zone.
+      if (
+        touched &&
+        previousClose < zone.low &&
+        candle.high >= zone.mid &&
+        candle.close < zone.mid - reclaimBuffer
+      ) {
         return 'RETEST_FROM_BELOW_REJECTED';
       }
       return touched ? 'NOISY' : 'NONE';
